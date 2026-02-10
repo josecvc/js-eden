@@ -1,3 +1,0 @@
-include("models/SciFest2015/nim-coins/nim-coins-stones.js-e");
-include("models/SciFest2015/nim-coins/playsheet.js-e");
-

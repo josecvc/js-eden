@@ -1,3 +1,0 @@
-include("models/SciFest2015/light-box/light-box.js-e");
-include("models/SciFest2015/light-box/playsheet.js-e");
-

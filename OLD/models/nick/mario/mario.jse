@@ -1,8 +1,0 @@
-/**
- * @title Mario Game
- * @author Nicolas Pope
- */
-
-import mario/mario;
-import mario/world;
-import mario/config;

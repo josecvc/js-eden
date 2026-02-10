@@ -1,7 +1,0 @@
-/**
- * @title Nim Coins
- */
-
-import scifest2015/nimcoins/stones;
-import scifest2015/nimcoins/playsheet;
-

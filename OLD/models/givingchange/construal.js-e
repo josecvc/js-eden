@@ -1,9 +1,0 @@
-/**
- * @title Giving Change
- * @author Meurig Beyon
- */
-
-import givingchange/model;
-import givingchange/visuals;
-import givingchange/action;
-import givingchange/init;

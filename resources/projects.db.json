@@ -83,5 +83,12 @@
 		"listed": true,
 		"author": "Meurig Beynon",
 		"rating": 0
+	},
+	"layouts": {
+		"title": "Layouts",
+		"file": "resources/projects/Layouts.js-e",
+		"author": "Nicolas Pope",
+		"tags": ["lib","library"],
+		"listed": true
 	}
 }

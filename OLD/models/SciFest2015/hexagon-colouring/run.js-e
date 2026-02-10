@@ -1,3 +1,0 @@
-include("models/SciFest2015/hexagon-colouring/hexagon-colouring.js-e");
-include("models/SciFest2015/hexagon-colouring/playsheet.js-e");
-

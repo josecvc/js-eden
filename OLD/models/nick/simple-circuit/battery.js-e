@@ -1,7 +1,0 @@
-/**
- * @title Battery Circuit Element
- * @author Nicolas Pope
- */
-
-import nick/circuit/battery/horizontal;
-

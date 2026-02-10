@@ -1,7 +1,0 @@
-/**
- * @title SciFest 2015 Shopping
- */
-
-import compatibility/scifest2015 enabled;
-import scifest2015/shopping/basic enabled;
-##import scifest2015/shopping/slides enabled;

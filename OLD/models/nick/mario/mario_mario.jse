@@ -1,8 +1,0 @@
-/**
- * @title Mario Character Agents
- * @author Nicolas Pope
- */
-
-import mario/mario/animation;
-import mario/mario/motion;
-import mario/mario/control noexec;

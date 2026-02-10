@@ -4,39 +4,119 @@ import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import session from 'express-session';
 import config from './config.js';
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 global.Eden = { edenFunctions: {} };
 global.EdenSymbol = function(){};
 EdenSymbol.prototype.value = function(){};
 global.edenFunctions = Eden.edenFunctions;
 
-const lang = require(`${config.JSEDENPATH}js/language/lang.js`);
+const lang = require(path.resolve(
+  config.JSEDENPATH,
+  "js/language/lang.js"
+));
 global.Language = lang.Language;
 
-const lex = require(`${config.JSEDENPATH}js/lex.js`);
+
+
+const lex = require(path.resolve(
+  config.JSEDENPATH,
+  "js/lex.js"
+));
 global.EdenStream = lex.EdenStream;
 global.EdenSyntaxData = lex.EdenSyntaxData;
-global.rt = require(`${config.JSEDENPATH}js/core/runtime.js`);
+path.resolve(
+  config.JSEDENPATH,
+  "js/core/runtime.js"
+)
+global.rt = require(path.resolve(
+  config.JSEDENPATH,
+  "js/core/runtime.js"
+));
 
-require(`${config.JSEDENPATH}js/language/en.js`);
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/language/en.js"
+));
 //require(config.JSEDENPATH + "js/util/misc.js");
-require(config.JSEDENPATH + "js/index.js");  
-require(config.JSEDENPATH + "js/selectors/selector.js");  
-require(config.JSEDENPATH + "js/selectors/property.js");  
-require(config.JSEDENPATH + "js/selectors/name.js");  
-require(config.JSEDENPATH + "js/selectors/tag.js");  
-require(config.JSEDENPATH + "js/selectors/intersection.js");  
-require(config.JSEDENPATH + "js/selectors/union.js");  
-require(config.JSEDENPATH + "js/selectors/navigate.js");  
-require(config.JSEDENPATH + "js/ast/ast.js");
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/index.js"
+));
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/selector.js"
+));
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/property.js"
+));
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/name.js"
+)); 
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/tag.js"
+));
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/intersection.js"
+));
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/union.js"
+));  
+
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/selectors/navigate.js"
+));  
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/ast/ast.js"
+));
 
 import * as passportUsers from './passport-users.js';
 global.window = {};
 var sqlite3 = require("sqlite3").verbose();
-require(config.JSEDENPATH + "js/lib/diff_match_patch.js"); 
+
+require(path.resolve(
+  config.JSEDENPATH,
+  "js/lib/diff_match_patch.js"
+)); 
 var randomstring = require('randomstring');
-var errors = require(config.JSEDENPATH + "js/core/errors.js");
-var warnings = require(config.JSEDENPATH + "js/core/warnings.js");
+
+var errors = require(path.resolve(
+  config.JSEDENPATH,
+  "js/core/errors.js"
+));
+
+var warnings = require(path.resolve(
+  config.JSEDENPATH,
+  "js/core/warnings.js"
+));
 var db = new sqlite3.Database(config.DBPATH);
 var allKnownProjects = {};
 var projectRatings = {};

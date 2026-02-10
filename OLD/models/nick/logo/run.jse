@@ -1,4 +1,0 @@
-require("Canvas2D");
-
-execute2("import logo/example1;");
-

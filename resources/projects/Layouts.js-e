@@ -67,8 +67,6 @@ view_slidepic_x is (slide_remaining_x / 2) - (view_slidepic_width / 2) if (!slid
 view_slidepic_lock = true;
 view_slidepic_zoom is view_slidepic_height / slide_resolution;
 
-/* Prevent scrolling of body */
-${{ $('#jseden-views').css("overflow","hidden"); }}$
 
 slide_buttons is Div(<<END
 <style>.slidebuttons { z-index: 2; opacity: 0.5; } .slidebuttons:hover { opacity: initial; }</style>
@@ -80,7 +78,7 @@ END if (slideno > 1) else "<button class=\"disabled\">Previous</button>") + (<<E
 <button data-jseden="slideno++;">Next</button></div>
 END if (slideno < slide_max) else "<button class=\"disabled\">Next</button>"), 10, slide_resolution - 45);
 
-slidepic is (slide{slideno} if (slide{slideno} != @) else []) // ([slide_buttons] if (slide_showbuttons) else []);
+/*slidepic is (slide{slideno} if (slide{slideno} != @) else []) // ([slide_buttons] if (slide_showbuttons) else []);*/
 
 jseden_menu_showcreate = true;
 jseden_menu_showexisting = true;
@@ -214,9 +212,11 @@ book_mobile_topshift is book_resolution if jseden_mobile && book_offset_top == 0
 	else 0;
 
 /* Prevent scrolling of body */
+/*
 if (!jseden_mobile) {
 ${{ $('#jseden-views').css("overflow","hidden"); }}$
 }
+*/
 
 if (jseden_mobile) {
 book_buttons is Div(<<END
