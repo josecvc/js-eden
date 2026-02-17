@@ -90,5 +90,12 @@
 		"author": "Nicolas Pope",
 		"tags": ["lib","library"],
 		"listed": true
+	},
+	"klaxon": {
+		"title": "Klaxon Synthesizer",
+		"file": "resources/projects/klaxon.js-e",
+		"author": "J",
+		"tags": ["synth"],
+		"listed": true
 	}
 }

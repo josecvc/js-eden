@@ -1,5 +1,5 @@
 import config from './config.js';
-import {ensureAuthenticated} from './common';
+import {ensureAuthenticated} from './common.js';
 
 let db;
 

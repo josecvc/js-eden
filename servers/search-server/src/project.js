@@ -1,7 +1,8 @@
-import {ERROR_SQL, ERROR_NOTADMIN, ERROR_NO_PROJECTID, ERROR_USER_NOT_OWNER, ERROR_PROJECT_NOT_MATCHED} from './errors';
-import {ensureAuthenticated, getFullVersion, logDBError, logAPI, logAPIError, log} from './common';
-import {reindexProject} from './search';
-import {QueryTypes, Op} from 'sequelize';
+import {ERROR_SQL, ERROR_NOTADMIN, ERROR_NO_PROJECTID, ERROR_USER_NOT_OWNER, ERROR_PROJECT_NOT_MATCHED} from './errors.js';
+import {ensureAuthenticated, getFullVersion, logDBError, logAPI, logAPIError, log} from './common.js';
+import {reindexProject} from './search.js';
+import pkg from 'sequelize';
+const {QueryTypes, Op} = pkg;
 
 const projectRatings = {};
 const projectRatingsCount = {};

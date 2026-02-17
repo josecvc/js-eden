@@ -3,11 +3,19 @@ import passport from 'passport';
 import cookieParser from 'cookie-parser';
 import bodyParser from 'body-parser';
 import session from 'express-session';
+import { Sequelize } from 'sequelize';
 import config from './config.js';
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 import path from "path";
 import { fileURLToPath } from "url";
+
+import users from './users.js';
+import auth from './auth.js';
+import project from './project.js';
+import search from './search.js';
+import comments from './comments.js';
+import social from './social.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,16 +39,16 @@ const lex = require(path.resolve(
 ));
 global.EdenStream = lex.EdenStream;
 global.EdenSyntaxData = lex.EdenSyntaxData;
+
 path.resolve(
   config.JSEDENPATH,
   "js/core/runtime.js"
 )
+
 global.rt = require(path.resolve(
   config.JSEDENPATH,
   "js/core/runtime.js"
 ));
-
-
 
 require(path.resolve(
   config.JSEDENPATH,
@@ -117,7 +125,27 @@ var warnings = require(path.resolve(
   config.JSEDENPATH,
   "js/core/warnings.js"
 ));
-var db = new sqlite3.Database(config.DBPATH);
+
+const dataconfig = {
+	test: {
+		filename: ':memory:',
+	},
+	development: {
+		filename: config.DBPATH,
+	},
+	production: {
+		filename: config.DBPATH,
+	},
+};
+
+var rawdb = new sqlite3.Database(config.DBPATH);
+
+const db = new Sequelize({
+	dialect: 'sqlite',
+	storage: dataconfig.development.filename,
+	logging: msg => {}
+});
+
 var allKnownProjects = {};
 var projectRatings = {};
 var projectRatingsCount = {};
@@ -140,14 +168,32 @@ global.eden = {};
 eden.root = {};
 eden.root.symbols = {};
 
+
+
 //var doxy = require(config.JSEDENPATH + "js/doxycomments.js");
 
 var vstmtStr = "select projects.projectID as projectID,view_listedVersion.saveID as saveID,title,minimisedTitle,projectMetaData,ifnull(group_concat(tag, \" \"),\"\") as tags, view_listedVersion.date as date," +
  		" name as authorname from view_listedVersion, projects, oauthusers left join tags on projects.projectID = tags.projectID where " +
 		"projects.projectID = view_listedVersion.projectID and owner = oauthusers.userid";
 
-var vstmt = db.prepare(vstmtStr + " group by projects.projectid");
+var vstmt = rawdb.prepare(vstmtStr + " group by projects.projectid");
 
+
+
+import * as models from './models.js';
+
+async function syncModels() {
+	for (const name in models) {
+	if (name === 'default') continue;
+	console.log(`Creating model '${name}'`);
+	db.define(name.toLowerCase(), models[name], {
+		freezeTableName: true,
+		timestamps: false,
+		});
+	}
+	models.default(db);
+	return db.sync();
+}
 
 initASTDB();
 
@@ -175,7 +221,7 @@ const generateTimeStamp = function(str) {
 }
 
 function getFullVersion(version, projectID, meta, callback){
-	var versionStmt = db.prepare("SELECT fullsource, forwardPatch,parentDiff,date FROM projectversions WHERE saveID = ? AND projectID = ?");
+	var versionStmt = rawdb.prepare("SELECT fullsource, forwardPatch,parentDiff,date FROM projectversions WHERE saveID = ? AND projectID = ?");
 	versionStmt.each(version,projectID, function(err,row){
 		if(row.fullsource == null){
 			//Go and get the source from the parentDiff
@@ -264,7 +310,7 @@ function initASTDB(){
 
 function reindexProject(projectID){
 	log("Reindexing projectID: " + projectID);
-	var myVStmt = db.prepare(vstmtStr + " and projects.projectID = @projectID");
+	var myVStmt = rawdb.prepare(vstmtStr + " and projects.projectID = @projectID");
 	
 	var params = {};
 	params["@projectID"] = projectID;
@@ -375,6 +421,19 @@ var app = express();
   app.use(passport.initialize());
   app.use(passport.session());
 
+
+app.db = db;
+app.models = db.models;
+
+await syncModels();
+
+users(app);
+auth(app);
+project(app);
+comments(app);
+social(app);
+await search(app, {});
+
   app.get('/', function(req, res){
 	  logErrorTime("Getting root");
 	  if(req.user !== undefined && req.user.id == null){
@@ -399,7 +458,7 @@ var app = express();
   app.post("/updateprofile",ensureAuthenticated, function(req,res){
 	  logErrorTime("update Profile");
 	  var displayName = req.body.displayName;
-	  var stmt = db.prepare("UPDATE oauthusers SET name = ?, status = \"registered\" WHERE oauthstring = ?");
+	  var stmt = rawdb.prepare("UPDATE oauthusers SET name = ?, status = \"registered\" WHERE oauthstring = ?");
 	  stmt.run(req.body.displayName, req.user.oauthstring,function(err){
 		  if(err){
 				res.json({error: ERROR_SQL, description: "SQL Error", err:err});
@@ -416,7 +475,7 @@ var app = express();
 
   app.post('/comment/post', ensureAuthenticated, function(req,res){
 	  logErrorTime("Comment post");
-	  var stmt = db.prepare("INSERT INTO comments VALUES (NULL, ?, ?, current_timestamp, ?, ?, ?);");
+	  var stmt = rawdb.prepare("INSERT INTO comments VALUES (NULL, ?, ?, current_timestamp, ?, ?, ?);");
 	  if(req.body.publiclyVisible != 0 && req.body.publiclyVisible != 1)
 		  res.json({error: ERROR_INVALID_FORMAT, description: "Invalid range for 'publiclyVisible'"})
 	  stmt.run(req.body.projectID,req.body.versionID,req.user.id, req.body.publiclyVisible, req.body.comment,function(err){
@@ -430,7 +489,7 @@ var app = express();
   
   app.post('/comment/delete', ensureAuthenticated, function(req,res){
 	  logErrorTime("comment delete");
-	  var stmt = db.prepare("DELETE FROM comments WHERE commentID = ? AND author = ?");
+	  var stmt = rawdb.prepare("DELETE FROM comments WHERE commentID = ? AND author = ?");
 	  stmt.run(req.body.commentID,req.user.id,function(err){
 			if(err){
 				res.json({error: ERROR_SQL, description: "SQL Error", err:err});
@@ -460,7 +519,7 @@ var app = express();
 		  criteriaObject["@limit"] = req.query.limit;
 	  
 	  stmtstr += " AND author = userid ORDER BY date DESC LIMIT @limit OFFSET @offset";
-	  var stmt = db.prepare(stmtstr);
+	  var stmt = rawdb.prepare(stmtstr);
 	  
 	  stmt.all(criteriaObject,function(err,rows){
 		  if(err){
@@ -487,7 +546,7 @@ var app = express();
 				  
 				  stmtstr += " AND author = userid LIMIT @limit OFFSET @offset";
 				  
-				  var privStmt = db.prepare(stmtstr);
+				  var privStmt = rawdb.prepare(stmtstr);
 				  
 				  privStmt.all(criteriaObject, function(err,privRows){
 					  if(err){
@@ -525,7 +584,7 @@ var app = express();
 		  criteriaObject["@limit"] = req.query.limit;
 	  
 	  stmtstr += " AND author = userid ORDER BY date DESC LIMIT @limit OFFSET @offset";
-	  var stmt = db.prepare(stmtstr);
+	  var stmt = rawdb.prepare(stmtstr);
 	  
 	  stmt.all(criteriaObject,function(err,rows){
 		  if(err){
@@ -537,7 +596,7 @@ var app = express();
   });
   
   function registerUser(req, oauthcode,displayName,status,callback){
-	  var stmt = db.prepare("INSERT INTO oauthusers VALUES (NULL, ?, ?, ?,0)");
+	  var stmt = rawdb.prepare("INSERT INTO oauthusers VALUES (NULL, ?, ?, ?,0)");
 		stmt.run(oauthcode, displayName, status,function(err){
 			req.user.id = this.lastID;
 			if(callback){
@@ -598,7 +657,7 @@ app.post('/project/add', ensureAuthenticated, function(req, res){
 	var projectID = req.body.projectID;
 	
 	if(projectID == undefined || projectID == null || projectID == ""){
-		db.run("BEGIN TRANSACTION");
+		rawdb.run("BEGIN TRANSACTION");
 		log("Creating new project");
 		createProject(req, res, function(req, res, lastID){
 			log("New project id is " + lastID);
@@ -607,11 +666,11 @@ app.post('/project/add', ensureAuthenticated, function(req, res){
 	}else if(isNaN(projectID)){
 		res.json({error: ERROR_INVALID_PROJECTID_FORMAT, description: "Invalid projectID format"});
 	}else{
-		db.run("BEGIN TRANSACTION");
+		rawdb.run("BEGIN TRANSACTION");
 		checkOwner(req,res,function(){
 			updateProject(req, res, function(err){
 				if(req.body.source == undefined){
-					db.run("END");
+					rawdb.run("END");
 					res.json({status:"updated", projectID: projectID});
 				}else{
 					addProjectVersion(req, res, projectID);	
@@ -675,7 +734,7 @@ function log(str){
 function checkOwner(req,res,callback, failedcallback,pid){
 	logErrorTime("checking Owner");
 	logErrorTime("pid" + pid);
-	var checkStmt = db.prepare("SELECT owner,writePassword FROM projects WHERE projectID = @projectID");
+	var checkStmt = rawdb.prepare("SELECT owner,writePassword FROM projects WHERE projectID = @projectID");
 	var qValues = {};
 	if(pid){
 		qValues["@projectID"] = pid;
@@ -684,14 +743,14 @@ function checkOwner(req,res,callback, failedcallback,pid){
 	}
 	checkStmt.all(qValues,function(err,rows){
 		if(rows.length == 0){
-			db.run("ROLLBACK");
+			rawdb.run("ROLLBACK");
 			res.json({error: ERROR_NO_EXISTING_PROJECT, description: "No existing project"});
 		}else{
 			if(rows[0].owner == req.user.id || (req.body.writePassword == rows[0].writePassword && rows[0].writePassword != null)){
 				req.body.writePassword = rows[0].writePassword;
 				callback();
 			}else{
-				db.run("ROLLBACK");
+				rawdb.run("ROLLBACK");
 				if(failedcallback){
 					failedcallback("You do not own this project");
 				}
@@ -734,23 +793,23 @@ function updateProject(req,res,callback){
 		log("About to delete " + deleteStr);
 		var tagObject = {};
 		tagObject["@projectID"] = req.body.projectID;
-		db.run(deleteStr,tagObject,function(err){
+		rawdb.run(deleteStr,tagObject,function(err){
 			if(err){
-				db.run("ROLLBACK");
+				rawdb.run("ROLLBACK");
 				res.json({error: ERROR_SQL, description: "SQL Error", err:err});
 			}else
 				updateTags(req,req.body.projectID,function(err){
 					if(err){
-						db.run("ROLLBACK");
+						rawdb.run("ROLLBACK");
 						res.json({error: ERROR_SQL, description: "SQL Error", err:err})
 					}
 					log("Updating project " + updateStr);
-					db.run(updateStr,updateValues,callback);
+					rawdb.run(updateStr,updateValues,callback);
 				});
 		});
 	}else{
 		log("Updating project " + updateStr);
-		db.run(updateStr,updateValues,callback);
+		rawdb.run(updateStr,updateValues,callback);
 		
 	}
 
@@ -778,24 +837,24 @@ function updateTags(req,projectID,callback){
 	var insertStr = "INSERT INTO tags VALUES " + insPairs.join(",");
 	
 	log("inserting tags " + insertStr);
-	db.run(insertStr,tagObject,callback);
+	rawdb.run(insertStr,tagObject,callback);
 }
 
 function createProject(req, res, callback){
-	var insertProjectStmt = db.prepare("INSERT INTO projects values (NULL,?,?,?,?,?,?,?,?)");
+	var insertProjectStmt = rawdb.prepare("INSERT INTO projects values (NULL,?,?,?,?,?,?,?,?)");
 	var writePassword = parseInt(Math.random() * 100000000000000000).toString(36);
 	req.body.writePassword = writePassword;
 	insertProjectStmt.run(req.body.title,req.body.minimisedTitle,req.body.image,req.user.id,null,
 			req.body.parentProject,req.body.metadata, writePassword,
 			function(err){
 		if(err){
-			db.run("ROLLBACK");
+			rawdb.run("ROLLBACK");
 			res.json({error: ERROR_SQL, description: "SQL Error", err:err})
 		}else{
 			var lastProjectID = this.lastID;
 			updateTags(req,lastProjectID,function(err){
 				if(err){
-					db.run("ROLLBACK");
+					rawdb.run("ROLLBACK");
 					res.json({error: ERROR_SQL, description: "SQL Error", err:err})
 				}else
 					callback(req, res, lastProjectID);
@@ -804,14 +863,14 @@ function createProject(req, res, callback){
 		});
 	if(req.body.parentProject){
 		var downloadsSQL = "UPDATE projectstats SET forks = forks + 1 WHERE projectID = ?;";
-		db.run(downloadsSQL,req.body.parentProject,function(err){
+		rawdb.run(downloadsSQL,req.body.parentProject,function(err){
 			if(err){
 				logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 				return;
 			}
 			if(this.changes == 0){
 				var insDownloadsSQL = "INSERT INTO projectstats VALUES (?,0,1,0,0)";
-				db.run(insDownloadsSQL,req.body.parentProject,function(err){
+				rawdb.run(insDownloadsSQL,req.body.parentProject,function(err){
 					if(err){
 						logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 						return;
@@ -826,7 +885,7 @@ function createProject(req, res, callback){
 }
 
 function addProjectVersion(req, res, projectID){
-	var addVersionStmt = db.prepare("INSERT INTO projectversions values (NULL,@projectID,@source,@pForward,@pBackward,current_timestamp,@from,@readPassword,@author)");
+	var addVersionStmt = rawdb.prepare("INSERT INTO projectversions values (NULL,@projectID,@source,@pForward,@pBackward,current_timestamp,@from,@readPassword,@author)");
 	var pTextForward = null;
 	var pTextBackward = null;
 	var listed = false;
@@ -842,7 +901,7 @@ function addProjectVersion(req, res, projectID){
 	params["@readPassword"] = readPassword;
 
 	if(req.body.from){
-		db.serialize(function(){
+		rawdb.serialize(function(){
 		getFullVersion(req.body.from, projectID, [],function(ret){
 			var baseSrc = ret.source;
 			var dmp = new window.diff_match_patch();
@@ -878,19 +937,19 @@ function runAddVersion(addVersionStmt, listed, params,req,res){
 			upParams["@saveID"] = lastSaveID;
 			upParams["@projectID"] = projectID;
 			log(updateListedVersion);
-			db.run(updateListedVersion,upParams,function(err){
+			rawdb.run(updateListedVersion,upParams,function(err){
 				if(err){
-					db.run("ROLLBACK");
+					rawdb.run("ROLLBACK");
 					res.json({error: ERROR_SQL, description: "SQL Error", err:err})
 				}else{
-					db.run("END");
+					rawdb.run("END");
 					log("Created version " + lastSaveID + " of project " + projectID);
 					res.json({"saveID": lastSaveID, "projectID": projectID, "writePassword": req.body.writePassword, "readPassword": params["@readPassword"]});
 					reindexProject(projectID);
 				}
 			});
 		}else{
-			db.run("END");
+			rawdb.run("END");
 			log("Created version " + lastSaveID + " of project " + projectID);
 			res.json({"saveID": lastSaveID, "projectID": projectID, "writePassword": req.body.writePassword, "readPassword": params["@readPassword"]});
 		}
@@ -942,7 +1001,7 @@ app.get('/code/get', function(req, res){
 
 
 function getMaxReadableSaveID(projectID, user, res, callback){
-	var getMaxSaveIDStmt = db.prepare("SELECT max(saveID) as maxSaveID FROM projectversions, projects WHERE projects.projectID = projectversions.projectID " +
+	var getMaxSaveIDStmt = rawdb.prepare("SELECT max(saveID) as maxSaveID FROM projectversions, projects WHERE projects.projectID = projectversions.projectID " +
 			"AND projectversions.projectID = ? AND (readPassword is NULL OR projects.owner = ?)");
 	getMaxSaveIDStmt.get(projectID, user,function(err,row){
 		if(err){
@@ -956,7 +1015,7 @@ function getMaxReadableSaveID(projectID, user, res, callback){
 }
 
 function getVersionInfo(saveID,projectID,userID, readPassword, res, callback){
-	var getVersionInfoStmt = db.prepare("SELECT date, readPassword, owner FROM projectversions, projects WHERE projectversions.projectid = projects.projectid and saveID = ?");
+	var getVersionInfoStmt = rawdb.prepare("SELECT date, readPassword, owner FROM projectversions, projects WHERE projectversions.projectid = projects.projectid and saveID = ?");
 	getVersionInfoStmt.get(saveID,function(err,row){
 		if(err){
 			logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err});
@@ -981,7 +1040,7 @@ function getProjectMetaDataFromSaveID(saveID, res, callback){
 }
 
 function getProjectIDFromSaveID(saveID,res,callback){
-	var query = db.prepare('SELECT projectID FROM projectversions WHERE saveID = ?');
+	var query = rawdb.prepare('SELECT projectID FROM projectversions WHERE saveID = ?');
 	query.get(saveID,function(err,row){
 		if(err){
 			logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err});
@@ -992,7 +1051,7 @@ function getProjectIDFromSaveID(saveID,res,callback){
 	});
 }
 function getProjectMetaData(projectID, userID, res,callback){
-	var metadataQuery = db.prepare('SELECT projects.projectID, title, minimisedTitle, image, owner, oauthusers.name as ownername, publicVersion, parentProject, projectMetaData, '
+	var metadataQuery = rawdb.prepare('SELECT projects.projectID, title, minimisedTitle, image, owner, oauthusers.name as ownername, publicVersion, parentProject, projectMetaData, '
 		+ '(" " || group_concat(tag, " ") || " " ) as tags, stars as myrating '
 		+ 'FROM projects, oauthusers left outer join tags on projects.projectID = tags.projectID left outer join projectratings on '
 		+ 'projectratings.projectID = projects.projectID AND projectratings.userID = ? WHERE owner = oauthusers.userid AND projects.projectID = ?');
@@ -1008,14 +1067,14 @@ function getProjectMetaData(projectID, userID, res,callback){
 
 function increaseProjectDownloadStat(req,res){
 	var downloadsSQL = "UPDATE projectstats SET downloads = downloads + 1 WHERE projectID = ?;";
-	db.run(downloadsSQL,req.query.projectID,function(err){
+	rawdb.run(downloadsSQL,req.query.projectID,function(err){
 		if(err){
 			logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 			return;
 		}
 		if(this.changes == 0){
 			var insDownloadsSQL = "INSERT INTO projectstats VALUES (?,1,0,0,0)";
-			db.run(insDownloadsSQL,req.query.projectID,function(err){
+			rawdb.run(insDownloadsSQL,req.query.projectID,function(err){
 				if(err){
 					logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 					return;
@@ -1043,7 +1102,7 @@ app.get('/project/tags', function(req,res){
 		  criteriaObject["@limit"] = req.query.limit;*/
 	  
 	  stmtstr += " LIMIT @limit OFFSET @offset";
-	  var stmt = db.prepare(stmtstr);
+	  var stmt = rawdb.prepare(stmtstr);
 
       var tags = {};
 	  
@@ -1092,7 +1151,7 @@ app.get('/project/activity', function(req,res){
 		  criteriaObject["@limit"] = req.query.limit;
 	  
 	  stmtstr += " ORDER BY date DESC LIMIT @limit OFFSET @offset";
-	  var stmt = db.prepare(stmtstr);
+	  var stmt = rawdb.prepare(stmtstr);
 	  
 	  stmt.all(criteriaObject,function(err,rows){
 		  if(err){
@@ -1145,7 +1204,7 @@ app.get('/project/get', function(req,res){
 		getVersionInfo(targetSaveID,req.query.projectID,userID,req.query.readPassword,res,function(saveID,projectID,date){
 			
 			getProjectMetaData(req.query.projectID, userID, res, function(metaRow){
-				db.serialize(function(){
+				rawdb.serialize(function(){
 					
 					getFullVersion(saveID,req.query.projectID, metaRow, function(ret){
 						var source = ret.source;
@@ -1170,7 +1229,7 @@ app.get('/project/get', function(req,res){
 				
 				getProjectMetaData(req.query.projectID, userID, res, function(metaRow){
 					
-					db.serialize(function(){
+					rawdb.serialize(function(){
 						getFullVersion(saveID,req.query.projectID, metaRow, function(ret){
 							var source = ret.source;
 							var date = ret.date;
@@ -1194,7 +1253,7 @@ app.get('/project/get', function(req,res){
 
 
 function sendDiff(fromID,toSource,projectID,toID,res,metaRow){
-	db.serialize(function(){
+	rawdb.serialize(function(){
 		getFullVersion(fromID,projectID,[],function(ret){
 			var source = ret.source;
 			var dmp = new window.diff_match_patch();
@@ -1283,14 +1342,14 @@ app.post('/project/rate', function(req,res){
 	var projectID = req.body.projectID;
 	var rateSQL = "UPDATE projectratings SET stars = ? WHERE projectID = ? AND userID = ?;";
 	delete projectRatings[req.body.projectID];
-	db.run(rateSQL,starRating,projectID,userID,function(err){
+	rawdb.run(rateSQL,starRating,projectID,userID,function(err){
 		if(err){
 			logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 			return;
 		}
 		if(this.changes == 0){
 			var insRateSQL = "INSERT INTO projectratings VALUES (?,?,?,NULL);";
-			db.run(insRateSQL,projectID,userID,starRating,function(err){
+			rawdb.run(insRateSQL,projectID,userID,starRating,function(err){
 				if(err){
 					logErrorTime(err); res.json({error: ERROR_SQL, description: "SQL Error", err: err})
 					return;
@@ -1405,7 +1464,7 @@ app.get('/project/search', function(req, res){
 	}
 
 	//console.log(listQueryStr);
-	var listProjectStmt = db.prepare(listQueryStr);
+	var listProjectStmt = rawdb.prepare(listQueryStr);
 	var unknownRatings = [];
 
 	listProjectStmt.all(criteriaVals,function(err,rows){
@@ -1447,7 +1506,7 @@ function processNextRating(projectRows, unknownRatings,i,res){
 	}else{
 		var getRatingsStmt = "SELECT count(1) as c,sum(stars) as s FROM projectratings WHERE projectID = ?";
 		var projectID = unknownRatings[i];
-		db.get(getRatingsStmt,projectID,function(err,row){
+		rawdb.get(getRatingsStmt,projectID,function(err,row){
 			if(err || row === undefined){
 				res.json({error: ERROR_SQL, description: "SQL Error", err:err});
 			}
@@ -1459,7 +1518,7 @@ function processNextRating(projectRows, unknownRatings,i,res){
 				overallRating = null;
 			
 			var updateStarsStmt = "UPDATE projectstats SET avgStars = ? WHERE projectID = ?";
-			db.run(updateStarsStmt, overallRating, projectID, function(err){
+			rawdb.run(updateStarsStmt, overallRating, projectID, function(err){
 				if(err){
 					res.json({error: ERROR_SQL, description: "SQL Error", err:err});
 				}
@@ -1474,7 +1533,7 @@ app.post('/project/remove',ensureAuthenticated, function(req,res){
 	var projectID = req.body.projectID;
 	var userID = req.user.id;
 	var delStatement = "DELETE FROM projects WHERE projectID = ? AND owner = ?";
-	db.run(delStatement,projectID, userID,function(err){
+	rawdb.run(delStatement,projectID, userID,function(err){
 		if(err){
 			res.json({error: ERROR_SQL, description: "SQL Error", err:err});
 		}
@@ -1510,7 +1569,7 @@ function getListQueryStr(targetTable){
 app.get('/project/versions', function(req, res){
 	logErrorTime("Project versions");
 	if(req.query.projectID !== undefined){
-		var listProjectIDStmt = db.prepare("select projectid, saveID, date, parentDiff,author,name, case ifnull(readpassword,0) when 0 then 0 else 1 end as private from projectversions left join oauthusers ON author = userid where projectid = ?;");
+		var listProjectIDStmt = rawdb.prepare("select projectid, saveID, date, parentDiff,author,name, case ifnull(readpassword,0) when 0 then 0 else 1 end as private from projectversions left join oauthusers ON author = userid where projectid = ?;");
 		listProjectIDStmt.all(req.query.projectID,function(err,rows){
 			for(var i = 0; i < rows.length; i++){
 				if(rows[i].author === undefined || rows[i].author == null)
@@ -1519,7 +1578,7 @@ app.get('/project/versions', function(req, res){
 			res.json(rows);
 		});
 	}else if(req.query.userID !== undefined){
-		var listProjectStmt = db.prepare("select projects.projectid, saveID, date, parentDiff, case ifnull(readpassword,0) when 0 then 0 else 1 end as private from projectversions,projects where projects.projectid = projectversions.projectid AND owner = ? ORDER BY date;");
+		var listProjectStmt = rawdb.prepare("select projects.projectid, saveID, date, parentDiff, case ifnull(readpassword,0) when 0 then 0 else 1 end as private from projectversions,projects where projects.projectid = projectversions.projectid AND owner = ? ORDER BY date;");
 		listProjectStmt.all(req.user.id,function(err,rows){
 			res.json(rows);
 		});
@@ -1596,7 +1655,7 @@ app.get('/logout', function(req, res){
 
 /*
 app.get('/social/activity', function(req, res){
-	/*	var activityStmt = db.prepare("select ;");
+	/*	var activityStmt = rawdb.prepare("select ;");
 		listProjectStmt.all(criteriaVals,function(err,rows){
 			
 		});
@@ -1604,7 +1663,7 @@ app.get('/social/activity', function(req, res){
 
 app.get('/social/projects', function(req, res){
 	logErrorTime("Social projects");
-		var activityStmt = db.prepare("select * from view_projectfollows where follower = ? order by date desc limit 20");
+		var activityStmt = rawdb.prepare("select * from view_projectfollows where follower = ? order by date desc limit 20");
 		activityStmt.all(req.user.id,function(err,rows){
 			if(err){
 				console.log("Error: " + err);
@@ -1617,7 +1676,7 @@ app.get('/social/projects', function(req, res){
 
 app.get('/social/comments', function(req, res){
 	logErrorTime("Social comments");
-	var activityStmt = db.prepare("select * from view_projectfollows where follower = ? order by date desc limit 20");
+	var activityStmt = rawdb.prepare("select * from view_projectfollows where follower = ? order by date desc limit 20");
 	activityStmt.all(req.user.id,function(err,rows){
 		if(err){
 			console.log("Error: " + err);
@@ -1630,7 +1689,7 @@ app.get('/social/comments', function(req, res){
 
 app.get('/social/followproject', function(req,res){
 	logErrorTime("Social followproject");
-	var followProjectStmt = db.prepare("INSERT INTO followprojects VALUES (?, ?)");
+	var followProjectStmt = rawdb.prepare("INSERT INTO followprojects VALUES (?, ?)");
 	followProjectStmt.run(req.query.projectID, req.user.id,function(err){
 		if(err){
 			if(err.errno != 19){

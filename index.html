@@ -37,6 +37,7 @@ See LICENSE.txt
 
 	<script type="text/javascript" src="js/lib/jquery-3.5.1.min.js"></script>
 	<script type="text/javascript" src="js/lib/jquery-ui-1.12.1.min.js"></script>
+	
 	<style type="text/css">
 		/*If we ever upgrade to jquery.ui version 1.10 or later then remove the following rule. */
 		.ui-front {
@@ -388,6 +389,8 @@ See LICENSE.txt
 					$("#welcomelinks").get(0).style.display = "none";
 				}
 			} else {
+				console.log(Eden.DB.isConnected());
+				console.log("Working?")
 				//$("#welcometext").get(0).style.display = "block";
 				$("#project-browser").html('<p style="margin-left: 20px">Construal store: <span style="color:red; font-weight: bold;">offline</span>. Our server is undergoing maintenance, try again later or look at the selected examples below.</p><div class="jseden-project-cat">Examples:</div><div id="jseden-offline-projects" class="jseden-dialog-plisting" style="height: initial;"></div>');
 				var plist = lopts.find("#jseden-offline-projects");

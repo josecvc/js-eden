@@ -1,0 +1,71 @@
+"use cs3;"
+
+/**
+ * @title Start Your Model
+ */
+action start {
+    freq = 1.5;
+
+}
+
+do lib:unexecuted;
+if (jseden_project_mode == "restore") do :project > ACTIVE;
+if (jseden_project_mode != "safe") do :project > start;
+else createView("safemode","ScriptInput");
+
+action ACTIVE {
+    views_list = ["myscript"];
+    view_myscript_type = "ScriptInput";
+    view_myscript_tabs = [":project > start"];
+    view_myscript_current = 0;
+    jseden_project_title = "New Project";
+
+    func initAudioContext {
+        ${{
+            const audio_context = new AudioContext();
+            return audio_context;
+        }}$;
+    }
+
+    func initGainNode {
+        ${{
+            gainNode = root.lookup("ctx").value().createGain();
+            gainNode.connect(root.lookup("ctx").value().destination);
+            gainNode.gain.value = 1;
+            return gainNode;
+        }}$;
+    }
+
+    ctx is initAudioContext();
+    gain_node is initGainNode();
+    processor_node is null;
+
+    ${{
+        root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
+            console.log(
+                root.lookup("ctx").value().sampleRate
+            )
+            const node = new AudioWorkletNode(root.lookup("ctx").value(), "test-processor");
+            node.connect(root.lookup("ctx").value().destination);
+
+            fetch("../../klaxon-engine/dsp.wasm").then((res) => {
+                if(res.ok) {
+                    res.arrayBuffer().then((buffer) => {
+                    node.port.postMessage({
+                        wasm: buffer,
+                        sampleRate: root.lookup("ctx").value().sampleRate
+                        })
+                    }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
+                } else {
+                    throw new Error(res.status);
+                }
+                
+            }).catch((e) => {console.log("Error: Failed to retrieve WebAssembly module.\n" + e);})
+
+            root.lookup("processor_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
+        }).catch((e) => {
+            console.log("Error: Audio Processor failed to initialise.\n" + e);
+        });
+    }}$;
+}
+

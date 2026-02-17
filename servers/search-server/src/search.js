@@ -1,5 +1,6 @@
-import {getFullVersion, logAPI, logAPIError} from './common';
-import {QueryTypes} from 'sequelize';
+import {getFullVersion, logAPI, logAPIError} from './common.js';
+import pkg from 'sequelize';
+const {QueryTypes} = pkg;
 import 'colors';
 
 const allKnownProjects = {};

@@ -1,11 +1,11 @@
-export {default as oauthusers} from './models/oauthusers';
-export {default as projects} from './models/projects';
-export {default as projectversions} from './models/projectversions';
-export {default as comments} from './models/comments';
-export {default as tags} from './models/tags';
-export {default as projectstats} from './models/projectstats';
-export {default as projectratings} from './models/projectratings';
-export {default as localusers} from './models/localusers';
+export {default as oauthusers} from './models/oauthusers.js';
+export {default as projects} from './models/projects.js';
+export {default as projectversions} from './models/projectversions.js';
+export {default as comments} from './models/comments.js';
+export {default as tags} from './models/tags.js';
+export {default as projectstats} from './models/projectstats.js';
+export {default as projectratings} from './models/projectratings.js';
+export {default as localusers} from './models/localusers.js';
 
 export default function(db) {
 	db.models.projects.belongsTo(db.models.oauthusers, {

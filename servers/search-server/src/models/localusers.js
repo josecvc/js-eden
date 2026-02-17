@@ -1,4 +1,5 @@
-import { DataTypes } from 'sequelize';
+import pkg from 'sequelize';
+const { DataTypes } = pkg;
 
 export default {
 	localuserID: {

@@ -1,6 +1,7 @@
-import {ERROR_SQL, ERROR_NOTADMIN, ERROR_INVALID_FORMAT, ERROR_COMMENT_NOT_MATCHED} from './errors';
-import {ensureAuthenticated,logAPI,logDBError} from './common';
-import {Op} from 'sequelize';
+import {ERROR_SQL, ERROR_NOTADMIN, ERROR_INVALID_FORMAT, ERROR_COMMENT_NOT_MATCHED} from './errors.js';
+import {ensureAuthenticated,logAPI,logDBError} from './common.js';
+import pkg from 'sequelize';
+const {Op} = pkg;
 
 export default function(app) {
 	const db = app.rawdb;
