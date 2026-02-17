@@ -6,10 +6,21 @@ const importObject = {
     }
 };
 
-class TestProcessor extends AudioWorkletProcessor {
+class SynthProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
-        this.port.onmessage = (e) => this.initProcessor(e.data)
+        this.port.onmessage = (e) => {
+            const msg = e.data;
+            console.log(msg)
+            if (msg.type === "wasm") {
+                this.initProcessor(msg)
+            } else if (msg.type === "note_on") {
+                this.noteOn(msg.note);
+            } else if (msg.type === "note_off") {
+                this.noteOff(msg.note);
+            }
+            
+        };
     }
 
     initProcessor(message) {
@@ -45,6 +56,16 @@ class TestProcessor extends AudioWorkletProcessor {
             })
     }
 
+    noteOn(note) {
+        // Send this to a WASM export
+        console.log(note);
+        this.wasm.exports.add_note(note);
+    }
+
+    noteOff(note) {
+        this.wasm.exports.remove_note(note);
+    }
+
     process(ins, outs, parameters) {
         if(!this.wasm) return true;
 
@@ -60,4 +81,4 @@ class TestProcessor extends AudioWorkletProcessor {
     }
 }
 
-registerProcessor("test-processor", TestProcessor);
+registerProcessor("synth-processor", SynthProcessor);
