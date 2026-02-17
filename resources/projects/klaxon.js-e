@@ -88,7 +88,7 @@ action ACTIVE {
     ${{
     const keysDown = new Set();
 
-    const key_to_note = { // just to sample
+    const keyToNote = { // just to sample
         "KeyQ" : 40, // C 4
         "Digit2" : 41, // C# 4/Db 4
         "KeyW" : 42, // D 4
@@ -111,14 +111,14 @@ action ACTIVE {
 
     addEventListener("keydown", (e) => {    
         const code = e.code;
-        if(!key_to_note.hasOwnProperty(code)) return;
+        if(!keyToNote.hasOwnProperty(code)) return;
 
         if(!keysDown.has(code)) {
             keysDown.add(code);
             console.log("Down!");
             root.lookup("processor_node").value().port.postMessage({
                 type: "note_on",
-                note: key_to_note[code]
+                note: keyToNote[code]
             })
         }
        
@@ -127,18 +127,15 @@ action ACTIVE {
     addEventListener("keyup", (e) => {
     
         const code = e.code;
-        if(key_to_note.hasOwnProperty(code)) {
+        if(keyToNote.hasOwnProperty(code)) {
             keysDown.delete(code);
             console.log("Up!");
             root.lookup("processor_node").value().port.postMessage({
                 type: "note_off",
-                note: key_to_note[code]
+                note: keyToNote[code]
             })
-            
         }
     })
-
-
     }}$;
 }
 

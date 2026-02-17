@@ -69,7 +69,7 @@ extern "C" {
             
             for (int i = 0; i < frames; i++) // go through frames
             {
-                if (poly.voices[v].releasing && poly.voices[v].active) {
+                if (poly.voices[v].releasing) {
                     output[i] += wave_table.table[static_cast<int>(poly.voices[v].phase)] * poly.voices[v].velocity;
 
                     poly.voices[v].velocity *= 0.999f;
