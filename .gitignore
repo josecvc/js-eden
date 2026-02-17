@@ -18,3 +18,4 @@ plugins/network-remote/lo
 build/
 release-builds/
 .vscode/
+*.wasm
