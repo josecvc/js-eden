@@ -31,10 +31,11 @@ void WaveTable::generate_saw()
 
 extern "C" {
 
-    void init_wavetable(int sample_rate) 
+    void init_synth(int sample_rate) 
     {
         wave_table.init(sample_rate);
         wave_table.generate_saw();
+        poly.init();
     }
 
     float lerp(float a, float b, float t)
@@ -50,6 +51,11 @@ extern "C" {
     void remove_note(int note_id)
     {
         poly.remove_voice(note_id);
+    }
+
+    void set_unison_count(int instances)
+    {
+        poly.set_unison_count(instances);
     }
 
     void process(float* input, float* output, int frames) 
@@ -69,7 +75,7 @@ extern "C" {
             
             for (int i = 0; i < frames; i++) // go through frames
             {
-                if (poly.voices[v].releasing) {
+                if (poly.voices[v].releasing) { // release gracefully
                     output[i] += wave_table.table[static_cast<int>(poly.voices[v].phase)] * poly.voices[v].velocity;
 
                     poly.voices[v].velocity *= 0.999f;
@@ -80,7 +86,8 @@ extern "C" {
                     } 
 
                 } else if(poly.voices[v].active) {
-                     output[i] += wave_table.table[static_cast<int>(poly.voices[v].phase)]; // * (1.0f / static_cast<float>(poly.curr))
+                    // use (1.0f / static_cast<float>(poly.curr)) for no clipping
+                     output[i] += wave_table.table[static_cast<int>(poly.voices[v].phase)]; 
                 }
 
                 poly.voices[v].phase += phaseI;

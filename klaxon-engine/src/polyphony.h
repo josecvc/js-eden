@@ -9,12 +9,18 @@ struct Voice
     bool active{false};
     bool releasing{false};
     float velocity{1.0f};
+
+};
+
+struct Unison
+{
+    int instances;
 };
 
 class Polyphony 
 {
 public:
-    static constexpr int MAX_VOICES = 16;
+    static constexpr int MAX_VOICES = 64;
 
     Polyphony() {}
 
@@ -22,7 +28,9 @@ public:
     int get_current_voices();
     void add_voice(int note_id);
     void remove_voice(int note_id);
-
+    void set_unison_count(int instances);
+    
+    Unison uni;
     Voice voices[MAX_VOICES];
     int curr{0};
 };

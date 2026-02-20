@@ -5,8 +5,8 @@ add_definitions(-std=c++17)
 set(CMAKE_CXX_STANDARD 17)
 
 add_executable(dsp 
-src/dsp.cpp
-src/polyphony.cpp
+    src/dsp.cpp
+    src/polyphony.cpp
 )
 
 set_target_properties(dsp PROPERTIES SUFFIX ".wasm")
@@ -14,7 +14,7 @@ set_target_properties(dsp PROPERTIES SUFFIX ".wasm")
 target_link_options(dsp PRIVATE
     "--no-entry"
     "-sSTANDALONE_WASM"
-    "-sEXPORTED_FUNCTIONS=['_init_wavetable','_process', '_malloc', '_free', '_add_note', '_remove_note']"
+    "-sEXPORTED_FUNCTIONS=['_init_synth','_process', '_malloc', '_free', '_add_note', '_remove_note', '_set_unison_count']"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"
     "-msimd128"

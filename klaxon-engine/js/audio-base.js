@@ -18,6 +18,8 @@ class SynthProcessor extends AudioWorkletProcessor {
                 this.noteOn(msg.note);
             } else if (msg.type === "note_off") {
                 this.noteOff(msg.note);
+            } else if (msg.type === "unison") {
+                this.changeUnison(msg.instances);
             }
             
         };
@@ -48,7 +50,7 @@ class SynthProcessor extends AudioWorkletProcessor {
                     frames
                 );
 
-                this.wasm.exports.init_wavetable(message.sampleRate);
+                this.wasm.exports.init_synth(message.sampleRate);
 
             })
             .catch((e) => {
@@ -64,6 +66,10 @@ class SynthProcessor extends AudioWorkletProcessor {
 
     noteOff(note) {
         this.wasm.exports.remove_note(note);
+    }
+
+    changeUnison(instances) {
+        this.wasm.exports.set_unison_count(instances);
     }
 
     process(ins, outs, parameters) {

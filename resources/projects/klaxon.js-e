@@ -22,6 +22,28 @@ action m_vol {
     }
 }
 
+action unison {
+    unison = 1;
+    when(unison) {
+        ${{
+            let uni = root.lookup("unison").value();
+            if(uni > 10) {
+                vol = 10;
+                root.lookup("unison").assign(uni, root.scope, Eden.EdenSymbol.defaultAgent);
+            }
+            if(uni < 1) {
+                vol = 1;
+                root.lookup("unison").assign(uni, root.scope, Eden.EdenSymbol.defaultAgent);
+            }
+            root.lookup("processor_node").value().port.postMessage({
+                type: "unison",
+                instances: uni
+            })
+            console.log("Sending unison data");
+        }}$;
+    }
+}
+
 do lib:unexecuted;
 if (jseden_project_mode == "restore") do :project > ACTIVE;
 if (jseden_project_mode != "safe") do :project > start;
@@ -87,25 +109,26 @@ action ACTIVE {
 
     ${{
     const keysDown = new Set();
-
+    const transpose = 12;
+    const multiplier = -2;
     const keyToNote = { // just to sample
-        "KeyQ" : 40, // C 4
-        "Digit2" : 41, // C# 4/Db 4
-        "KeyW" : 42, // D 4
-        "Digit3" : 43, // D# 4/Eb 4
-        "KeyE" : 44, // E 4
-        "KeyR" : 45, // F 4
-        "Digit5" : 46, // F# 4/Gb 4
-        "KeyT" : 47, // G 4
-        "Digit6" : 48, // G# 4/Ab 4
-        "KeyY" : 49, // A 4
-        "Digit7" : 50, // A# 4/Bb 4
-        "KeyU" : 51, // B 4
-        "KeyI" : 52, // C 5
-        "Digit9" : 53, // C# 5/Db 5
-        "KeyO" : 54, // D 5
-        "Digit0" : 55, // D# 5/ Eb 5
-        "KeyP" : 56 // E
+        "KeyQ" :   40 + transpose*multiplier, // C 4
+        "Digit2" : 41 + transpose*multiplier, // C# 4/Db 4
+        "KeyW" :   42 + transpose*multiplier, // D 4
+        "Digit3" : 43 + transpose*multiplier, // D# 4/Eb 4
+        "KeyE" :   44 + transpose*multiplier, // E 4
+        "KeyR" :   45 + transpose*multiplier, // F 4
+        "Digit5" : 46 + transpose*multiplier, // F# 4/Gb 4
+        "KeyT" :   47 + transpose*multiplier, // G 4
+        "Digit6" : 48 + transpose*multiplier, // G# 4/Ab 4
+        "KeyY" :   49 + transpose*multiplier, // A 4
+        "Digit7" : 50 + transpose*multiplier, // A# 4/Bb 4
+        "KeyU" :   51 + transpose*multiplier, // B 4
+        "KeyI" :   52 + transpose*multiplier, // C 5
+        "Digit9" : 53 + transpose*multiplier, // C# 5/Db 5
+        "KeyO" :   54 + transpose*multiplier, // D 5
+        "Digit0" : 55 + transpose*multiplier, // D# 5/ Eb 5
+        "KeyP" :   56 + transpose*multiplier // E
     }
 
 
