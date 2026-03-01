@@ -6,7 +6,7 @@ const importObject = {
     }
 };
 
-class SynthProcessor extends AudioWorkletProcessor {
+class MixerProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
         this.port.onmessage = (e) => {
@@ -14,77 +14,94 @@ class SynthProcessor extends AudioWorkletProcessor {
             console.log(msg)
             if (msg.type === "wasm") {
                 this.initProcessor(msg)
-            } else if (msg.type === "note_on") {
-                this.noteOn(msg.note);
-            } else if (msg.type === "note_off") {
-                this.noteOff(msg.note);
-            } else if (msg.type === "unison") {
-                this.changeUnison(msg.instances);
             }
-            
         };
+        this.patterns = {};
     }
 
     initProcessor(message) {
-        WebAssembly.instantiate(message.wasm, {})
+        WebAssembly.instantiate(message.wasm, importObject)
             .then((obj) => {
                 this.wasm = obj.instance
-                
-                
-                const frames = 128;
 
+                // TODO: Add pattern data
+                
+                this.HEAPU8 = new Uint8Array(this.wasm.exports.memory.buffer); 
+                this.HEAPU32 = new Uint32Array(this.wasm.exports.memory.buffer); 
+                this.HEAPF32 = new Float32Array(this.wasm.exports.memory.buffer);
+
+                const frames = 128;
+                const channels = 2; // stereo audio
+                const max_incoming = 16;
                 const bytes = frames * 4;
 
-                this.inputPtr = this.wasm.exports.malloc(bytes);
-                this.outputPtr = this.wasm.exports.malloc(bytes);
+                this.mixer_ptr = this.wasm.exports.create_engine(message.sample_rate, message.bpm, message.rows_per_beat);
 
-                this.inputHeap = new Float32Array(
+                this.outputTablePtr = this.wasm.exports.malloc(channels * 4);
+
+                this.leftPtr = this.wasm.exports.malloc(bytes);
+                this.rightPtr = this.wasm.exports.malloc(bytes);
+                
+                this.leftHeap = new Float32Array(
                     this.wasm.exports.memory.buffer,
-                    this.inputPtr,
+                    this.leftPtr,
                     frames
                 );
 
-                this.outputHeap = new Float32Array(
+                this.rightHeap = new Float32Array(
                     this.wasm.exports.memory.buffer,
-                    this.outputPtr,
+                    this.rightPtr,
                     frames
                 );
 
-                this.wasm.exports.init_synth(message.sampleRate);
+                this.HEAPU32[(this.outputTablePtr >> 2) + 0] = this.leftPtr;
+                this.HEAPU32[(this.outputTablePtr >> 2) + 1] = this.rightPtr;
 
+                this.wasm.exports.init_engine(this.mixer_ptr, message.sampleRate, message.bpm, message.rowsPerBeat);
+
+                this.sampleRate = message.sampleRate;
+                this.bpm = message.bpm;
+                this.rowsPerBeat = message.rowsPerBeat;
+
+                this.playing = false;
+                this.rowNo = 0;
+                this.patternNo = 0;
             })
             .catch((e) => {
                 console.log("Error: Failed to instantiate WebAssembly module.\n" + e);
             })
     }
 
-    noteOn(note) {
-        // Send this to a WASM export
-        console.log(note);
-        this.wasm.exports.add_note(note);
-    }
-
-    noteOff(note) {
-        this.wasm.exports.remove_note(note);
-    }
-
-    changeUnison(instances) {
-        this.wasm.exports.set_unison_count(instances);
-    }
-
     process(ins, outs, parameters) {
         if(!this.wasm) return true;
+        
+        const n = outs[0][0].length;
 
-        const output = outs[0][0];
+        const beat = this.wasm.exports.process(this.mixer_ptr, this.outputTablePtr, n);
 
-        const n = output.length
+        // turn off
+        if(beat == -1) this.playing = false;
 
-        this.wasm.exports.process(this.inputPtr, this.outputPtr, n);
+        // we detect a beat and so update row count
+        if(beat == 1) {
+            this.port.postMessage({
+                type: "elapsed",
+                pattern: this.patternNo,
+                row: this.rowNo
+            });
+            this.rowNo++;
+        }
 
-        output.set(this.outputHeap);
+        if (this.rowNo >= 64) {
+            this.patternNo++;
+            this.rowNo = 0;
+        }
+        
+        outs[0][0].set(this.leftHeap);
+        outs[0][1].set(this.rightHeap);
 
         return true;
     }
 }
 
-registerProcessor("synth-processor", SynthProcessor);
+registerProcessor("mixer-processor", MixerProcessor);

@@ -4,44 +4,8 @@
  * @title Start Your Model
  */
 
-action m_vol {
-    master_volume = 100;
-    when(master_volume) {
-        ${{
-            let vol = root.lookup("master_volume").value();
-            if(vol > 100) {
-                vol = 100;
-                root.lookup("master_volume").assign(vol, root.scope, Eden.EdenSymbol.defaultAgent);
-            }
-            if(vol < 0) {
-                vol = 0;
-                root.lookup("master_volume").assign(vol, root.scope, Eden.EdenSymbol.defaultAgent);
-            }
-            root.lookup("gain_node").value().gain.value = vol / 100;
-        }}$;
-    }
-}
+action start {
 
-action unison {
-    unison = 1;
-    when(unison) {
-        ${{
-            let uni = root.lookup("unison").value();
-            if(uni > 10) {
-                vol = 10;
-                root.lookup("unison").assign(uni, root.scope, Eden.EdenSymbol.defaultAgent);
-            }
-            if(uni < 1) {
-                vol = 1;
-                root.lookup("unison").assign(uni, root.scope, Eden.EdenSymbol.defaultAgent);
-            }
-            root.lookup("processor_node").value().port.postMessage({
-                type: "unison",
-                instances: uni
-            })
-            console.log("Sending unison data");
-        }}$;
-    }
 }
 
 do lib:unexecuted;
@@ -52,7 +16,7 @@ else createView("safemode","ScriptInput");
 action ACTIVE {
     views_list = ["myscript"];
     view_myscript_type = "ScriptInput";
-    view_myscript_tabs = [":project > m_vol"];
+    view_myscript_tabs = [":project > start"];
     view_myscript_current = 0;
     jseden_project_title = "New Project";
 
@@ -74,25 +38,26 @@ action ACTIVE {
 
     ctx is initAudioContext();
     gain_node is initGainNode();
-    processor_node is null;
+    mixer_node is null;
 
     ${{
         root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
             console.log(
                 root.lookup("ctx").value().sampleRate
             )
-            const node = new AudioWorkletNode(root.lookup("ctx").value(), "synth-processor");
+            const node = new AudioWorkletNode(root.lookup("ctx").value(), "mixer-processor", {numberOfInputs: 16, numberOfOutputs: 1, outputChannelCount: [2]});
 
             node.connect(root.lookup("gain_node").value());
             
-
             fetch("../../klaxon-engine/build/dsp.wasm").then((res) => {
                 if(res.ok) {
                     res.arrayBuffer().then((buffer) => {
                     node.port.postMessage({
                         type: "wasm",
                         wasm: buffer,
-                        sampleRate: root.lookup("ctx").value().sampleRate
+                        sampleRate: root.lookup("ctx").value().sampleRate,
+                        bpm: 140,
+                        rowsPerBeat: 4
                         })
                     }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
                 } else {
@@ -101,7 +66,11 @@ action ACTIVE {
                 
             }).catch((e) => {console.log("Error: Failed to retrieve WebAssembly module.\n" + e);})
 
-            root.lookup("processor_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
+            node.port.onmessage = (e) => {
+                console.log(e.data);
+            };
+
+            root.lookup("mixer_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
         }).catch((e) => {
             console.log("Error: Audio Processor failed to initialise.\n" + e);
         });
@@ -139,7 +108,7 @@ action ACTIVE {
         if(!keysDown.has(code)) {
             keysDown.add(code);
             console.log("Down!");
-            root.lookup("processor_node").value().port.postMessage({
+            root.lookup("mixer_node").value().port.postMessage({
                 type: "note_on",
                 note: keyToNote[code]
             })
@@ -148,12 +117,11 @@ action ACTIVE {
     })
 
     addEventListener("keyup", (e) => {
-    
         const code = e.code;
         if(keyToNote.hasOwnProperty(code)) {
             keysDown.delete(code);
             console.log("Up!");
-            root.lookup("processor_node").value().port.postMessage({
+            root.lookup("mixer_node").value().port.postMessage({
                 type: "note_off",
                 note: keyToNote[code]
             })

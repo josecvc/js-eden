@@ -1,6 +1,7 @@
 #ifndef DSP_H
 #define DSP_H
 
+// TODO: Total refactor, this needs to be a synth.h instead
 class WaveTable 
 {
 public:

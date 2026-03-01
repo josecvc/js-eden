@@ -1,15 +1,16 @@
 #ifndef POLYPHONY_H
 #define POLYPHONY_H
 
+// TODO: Add Sampler polyphony and Synth polyphony
 struct Voice 
 {
     int note_id;
+    int channel_id;
     float frequency{440.f};
     float phase{.0f};
     bool active{false};
     bool releasing{false};
     float velocity{1.0f};
-
 };
 
 struct Unison
