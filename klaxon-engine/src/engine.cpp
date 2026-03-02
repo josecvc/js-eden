@@ -20,10 +20,7 @@ int Engine::process(float** output, int frames)
 
 void Engine::mix_instruments(float** output, int frames)
 {
-    float* left_channel = output[0];
-    float* right_channel = output[1];
-
-    for(int i = 0; i < instrument_count; i++)
+    for(int i = 0; i < instruments.size(); i++)
     {
         instruments[i]->render(output, frames);
     }
@@ -103,9 +100,9 @@ void Engine::add_synth()
     instruments.push_back(std::move(instrument));
 }
 
-void Engine::add_sample(const char* filename, const void* data, unsigned long length)
+void Engine::add_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
 {
-    std::unique_ptr<Instrument> instrument = std::make_unique<SampleInstrument>(SampleInstrument());
+    std::unique_ptr<Instrument> instrument = std::make_unique<SampleInstrument>(SampleInstrument(filename, left, right, sample_rate, length));
 
     instruments.push_back(std::move(instrument));
 }
@@ -178,16 +175,30 @@ extern "C"
         engine->set_rows_per_beat(rows_per_beat);
     }
 
-    void add_sample(Engine* engine, const char* filename, const void* data, unsigned long length)
+    int add_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
     {
-        if (!engine) return;
-        engine->add_sample(filename, data, length);
+        if (!engine) return -1;
+        engine->add_sample(filename, left, right, sample_rate, length);
+
+        // free(left);
+        // free(right);
+
+        return 0;
     }
 
     void remove_instrument(Engine* engine, int instrument_id)
     {
         if (!engine) return;
         engine->remove_instrument(instrument_id);
+    }
+
+    int play_from_midi(Engine* engine, int instrument_id, int note_id)
+    {
+        if (!engine) return -2;
+        if(instrument_id >= engine->instruments.size()) return -1;
+        engine->instruments[instrument_id]->add_voice(0, note_id);
+
+        return 0;
     }
 
     //TODO: Finish WebAssembly functions

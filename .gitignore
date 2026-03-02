@@ -19,3 +19,4 @@ build/
 release-builds/
 .vscode/
 *.wasm
+klaxon-engine/assets/

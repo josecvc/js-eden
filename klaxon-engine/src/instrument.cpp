@@ -1,28 +1,41 @@
 #include "instrument.h"
 
-void SampleInstrument::render(float** output, int frames)
+SampleInstrument::SampleInstrument(const char* filename, float* left, float* right, int sample_rate, unsigned long length) 
 {
-    // TODO: Account for each voice please
-    
+    init(filename, left, right, sample_rate, length);
+}
+
+void SampleInstrument::init(const char* filename, float* left, float* right, int sample_rate, unsigned long length) 
+{
+    sample.load_sample(filename, left, right, sample_rate, length);
+}
+
+void SampleInstrument::render(float** output, int frames)
+{    
     if (poly.curr <= 0) return;
 
     for (int v = 0; v < poly.MAX_VOICES; v++) { // go through voices
         
         if(!poly.voices[v].active) continue;
-
         for (int i = 0; i < frames; i++)
         {
-            if (sample->channels == 1) {
-                output[0][i] += sample->left[position];
-                output[1][i] += sample->left[position];
+            if (sample.channels == 1) {
+                output[0][i] += sample.left[poly.voices[v].position];
+                output[1][i] += sample.left[poly.voices[v].position];
             } else {
-                output[0][i] += sample->left[position];
-                output[1][i] += sample->right[position];
+                output[0][i] += sample.left[poly.voices[v].position];
+                output[1][i] += sample.right[poly.voices[v].position];
+
+                // output[0][i] += sinf(1.5f * 3.14159f * i/frames);
+                // output[1][i] += sinf(1.5f * 3.14159f * i/frames);
             }
 
-            position++; // needs to be unique to each voice
+            ++poly.voices[v].position;
 
-            if (position >= sample->duration) position = 0;
+            if (poly.voices[v].position >= sample.length)
+            {
+                poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id);
+            }
         }
     }
 }
@@ -60,4 +73,25 @@ void SynthInstrument::render(float** output, int frames)
             if (poly.voices[v].phase >= WaveTable::WAVETABLE_SIZE) poly.voices[v].phase -= WaveTable::WAVETABLE_SIZE;
         }
     }
+}
+
+// simply call the polyphony
+void SampleInstrument::add_voice(int channel_id, int note_id)
+{
+    poly.add_voice(channel_id, note_id, 1.f);
+}
+
+void SampleInstrument::remove_voice(int channel_id, int note_id)
+{
+    poly.remove_voice(channel_id, note_id);
+}
+
+void SynthInstrument::add_voice(int channel_id, int note_id)
+{
+    poly.add_voice(channel_id, note_id, 1.f);
+}
+
+void SynthInstrument::remove_voice(int channel_id, int note_id)
+{
+    poly.remove_voice(channel_id, note_id);
 }

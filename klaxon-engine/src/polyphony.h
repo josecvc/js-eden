@@ -2,7 +2,7 @@
 #define POLYPHONY_H
 
 // TODO: Add Sampler polyphony and Synth polyphony
-struct Voice 
+struct SynthVoice 
 {
     int note_id;
     int channel_id;
@@ -13,6 +13,16 @@ struct Voice
     float velocity{1.0f};
 };
 
+struct SampleVoice 
+{
+    int note_id;
+    int channel_id;
+    bool active{false};
+    float gain{1.0f};
+
+    unsigned long position{0};
+};
+
 struct Unison
 {
     int instances;
@@ -21,18 +31,43 @@ struct Unison
 class Polyphony 
 {
 public:
-    static constexpr int MAX_VOICES = 64;
+    static constexpr int MAX_VOICES = 16;
 
-    Polyphony() {}
+    virtual ~Polyphony() = default;
+    virtual void init() = 0;
+    virtual int get_current_voices() const = 0;
+    virtual void add_voice(int channel_id, int note_id, float volume) = 0;
+    virtual void remove_voice(int channel_id, int note_id) = 0;
+};
 
-    void init();
-    int get_current_voices();
-    void add_voice(int note_id);
-    void remove_voice(int note_id);
+
+class SamplePolyphony : public Polyphony
+{
+public:
+    SamplePolyphony() {}
+
+    void init() override;
+    int get_current_voices() const override;
+    void add_voice(int channel_id, int note_id, float gain) override;
+    void remove_voice(int channel_id, int note_id) override;
+
+    SampleVoice voices[MAX_VOICES];
+    int curr{0};
+};
+
+class SynthPolyphony : public Polyphony
+{
+public:
+    SynthPolyphony() {}
+
+    void init() override;
+    int get_current_voices() const override;
+    void add_voice(int channel_id, int note_id, float vel) override;
+    void remove_voice(int channel_id, int note_id) override;
     void set_unison_count(int instances);
-    
+
     Unison uni;
-    Voice voices[MAX_VOICES];
+    SynthVoice voices[MAX_VOICES];
     int curr{0};
 };
 

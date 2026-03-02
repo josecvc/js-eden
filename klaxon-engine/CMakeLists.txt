@@ -25,11 +25,13 @@ target_link_options(dsp PRIVATE
         '_create_engine', 
         '_destroy_engine', 
         '_init_engine', 
-        '_process'
+        '_process',
+        '_add_sample',
+        '_play_from_midi'
     ]"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"
     "-msimd128"
     "-sALLOW_MEMORY_GROWTH=0"
-    "-sINITIAL_MEMORY=16MB"
+    "-sINITIAL_MEMORY=64MB"
 )

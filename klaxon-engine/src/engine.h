@@ -29,7 +29,7 @@ public:
     void set_sample_rate(int sample_rate);
     void set_rows_per_beat(int rows_per_beat);
 
-    void add_sample(const char* filename, const void* data, unsigned long length);
+    void add_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
     void add_synth();
     void remove_instrument(int instrument_id);
 

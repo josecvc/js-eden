@@ -2,23 +2,23 @@
 #define SAMPLE_H
 
 #include <vector>
-#include "lib/miniaudio.h"
 
 class Sample {
 public:
     Sample() {}
 
-    void load_sample(const char* filename, const void* data, unsigned long length);
+    void load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
 
-    const char* filename;
+    
 
     // raw PCM
     std::vector<float> left; 
     std::vector<float> right;
 
+    const char* filename;
     int channels;
-    ma_uint64 duration;
-
+    int sample_rate;
+    unsigned long length;
 };
 
 #endif

@@ -12,30 +12,33 @@ public:
     Instrument() {}
     virtual ~Instrument() = default;
     virtual void render(float** output, int frames) = 0;
-    virtual void init() = 0;
+    virtual void add_voice(int channel_id, int note_id) = 0;
+    virtual void remove_voice(int channel_id, int note_id) = 0;
 };
 
 class SampleInstrument : public Instrument
 {
 public:
-    SampleInstrument();
-    void init() override;    
-
-    Sample* sample;
-    int position = 0;
-    Polyphony poly;
-
+    SampleInstrument(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    void init(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    void add_voice(int channel_id, int note_id) override;
+    void remove_voice(int channel_id, int note_id) override;
     void render(float** output, int frames) override;
+
+    Sample sample;
+    SamplePolyphony poly;
 };
 
 class SynthInstrument : public Instrument
 {
 public:
-    void init() override;
+    void init();
+    void add_voice(int channel_id, int note_id) override;
+    void remove_voice(int channel_id, int note_id) override;
+    void render(float** output, int frames) override;
 
     WaveTable wave_table;
-    Polyphony poly;
-    void render(float** output, int frames) override;
+    SynthPolyphony poly;    
 };
 
 #endif
