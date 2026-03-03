@@ -20,6 +20,16 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.playMidi(msg);
             } else if (msg.type == "note_off") {
                 this.stopMidi(msg);
+            } else if (msg.type == "patten-order") {
+                this.setOrder(msg);
+            } else if (msg.type == "bpm") {
+                this.setBPM(msg);
+            } else if (msg.type == "rows-per-beat") {
+                this.setRPB(msg);
+            } else if (msg.type == "playstart") {
+                this.setPlay(msg);
+            } else if (msg.type == "playpause") {
+                this.setPause(msg);
             }
         };
         this.patterns = {};
@@ -62,7 +72,8 @@ class MixerProcessor extends AudioWorkletProcessor {
 
                 this.HEAPU32[(this.outputTablePtr >> 2) + 0] = this.leftPtr;
                 this.HEAPU32[(this.outputTablePtr >> 2) + 1] = this.rightPtr;
-
+                
+                // void init_engine(Engine* engine, int sample_rate, int bpm, int rows_per_beat)
                 this.wasm.exports.init_engine(this.enginePtr, msg.sampleRate, msg.bpm, msg.rowsPerBeat);
 
                 this.sampleRate = msg.sampleRate;
@@ -91,7 +102,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         const lAudioHeap = new Float32Array(
             this.wasm.exports.memory.buffer,
             lAudioPtr,
-            msg.data[1].length
+            msg.data[0].length
         );
 
         const rAudioHeap = new Float32Array(
@@ -103,6 +114,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         lAudioHeap.set(msg.data[0]);
         rAudioHeap.set(msg.data[1]);
 
+        // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate)
         const res = this.wasm.exports.add_sample(this.enginePtr, msg.filename, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate);
         console.log(res);
 
@@ -111,12 +123,56 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     playMidi(msg) {
+
+        // int play_from_midi(Engine* engine, int instrument_id, int note_id)
         const res = this.wasm.exports.play_from_midi(this.enginePtr, msg.instrumentId, msg.note);
-        console.log(res);
     }
 
     stopMidi(msg) {
         console.log(msg);
+    }
+
+    setOrder(msg) {        
+        // pointers and heaps to memory
+        const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
+        const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
+
+        const sequenceHeap = new Int32Array(
+            this.wasm.exports.memory.buffer,
+            sequencePtr,
+            msg.sequence.length
+        );
+
+        const patternHeap = new Int32Array(
+            this.wasm.exports.memory.buffer,
+            patternPtr,
+            msg.patterns.length
+        );
+
+        sequenceHeap.set(msg.sequence);
+        patternHeap.set(msg.patterns);
+
+        // int read_order(Engine* engine, int* sequence, int sequence_length, int* patterns, int pattern_length)
+        const res = this.wasm.exports.read_order(this.enginePtr, sequencePtr, msg.sequence.length, patternPtr, msg.patterns.length);
+
+        this.wasm.exports.free(sequencePtr);
+        this.wasm.exports.free(patternPtr);
+    }
+
+    setBPM(msg) {
+
+    }
+
+    setRPB(msg) {
+
+    }
+
+    setPlay(msg) {
+
+    }
+
+    setPause(msg) {
+
     }
 
     process(ins, outs, parameters) {
@@ -124,6 +180,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         
         const n = outs[0][0].length;
 
+        // int process(Engine* engine, float* output, int length)
         const beat = this.wasm.exports.process(this.enginePtr, this.outputTablePtr, n);
 
         // turn off

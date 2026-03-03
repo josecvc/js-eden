@@ -20,8 +20,6 @@ func initGainNode {
     }}$;
 }
 
-
-
 # nodes used to play audio
 ctx is initAudioContext();
 gain_node is initGainNode();
@@ -59,38 +57,39 @@ ${{
 
         root.lookup("engine_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
 
-        fetch("../../klaxon-engine/assets/Cumulus Break.wav").then(async (res) => {
-            const url = res.url;
-            const filename = decodeURIComponent(url.split("/").pop());
-            const buf = await res.arrayBuffer();
+        // Test code for uploading samples to WebAssembly memory
+        // fetch("../../klaxon-engine/assets/Cumulus Break.wav").then(async (res) => {
+        //     const url = res.url;
+        //     const filename = decodeURIComponent(url.split("/").pop());
+        //     const buf = await res.arrayBuffer();
 
-            return {filename: filename, buffer: buf};
-        }).then(async (payload) => {
-            const buf = await root.lookup("ctx").value().decodeAudioData(payload.buffer);
-            return {filename: payload.filename, data: buf};
-        }).then((decoded) => {
-            const data = decoded.data;
+        //     return {filename: filename, buffer: buf};
+        // }).then(async (payload) => {
+        //     const buf = await root.lookup("ctx").value().decodeAudioData(payload.buffer);
+        //     return {filename: payload.filename, data: buf};
+        // }).then((decoded) => {
+        //     const data = decoded.data;
 
-            let left = data.getChannelData(0);
-            let right;
+        //     let left = data.getChannelData(0);
+        //     let right;
 
-            if (data.numberOfChannels == 2) {
-                right = data.getChannelData(1);
-            } else if (data.numberOfChannels == 1) {
-                right = left;
-            } else {
-                throw new Error("Maximum 2 channels per sample.");
-            }
+        //     if (data.numberOfChannels == 2) {
+        //         right = data.getChannelData(1);
+        //     } else if (data.numberOfChannels == 1) {
+        //         right = left;
+        //     } else {
+        //         throw new Error("Maximum 2 channels per sample.");
+        //     }
 
-            root.lookup("engine_node").value().port.postMessage({
-                type: "sample",
-                filename: decoded.filename,
-                numberOfChannels: data.numberOfChannels,
-                sampleRate: data.sampleRate,
-                duration: data.length,
-                data: [left, right],
-            })
-        })
+        //     root.lookup("engine_node").value().port.postMessage({
+        //         type: "sample",
+        //         filename: decoded.filename,
+        //         numberOfChannels: data.numberOfChannels,
+        //         sampleRate: data.sampleRate,
+        //         duration: data.length,
+        //         data: [left, right],
+        //     })
+        // })
 
     }).catch((e) => {
         console.log("Error: Audio Processor failed to initialise.\n" + e);
@@ -100,7 +99,7 @@ ${{
 ${{
     const keysDown = new Set();
     const transpose = 12;
-    const multiplier = -2;
+    const multiplier = 0;
     const keyToNote = { // just to sample
     "KeyQ" :   40 + transpose*multiplier, // C 4
     "Digit2" : 41 + transpose*multiplier, // C# 4/Db 4
@@ -137,7 +136,7 @@ ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "note_on",
                 note: keyToNote[code],
-                instrumentId: 0
+                instrumentId: root.lookup("current_instrument").value()
             })
         }
         
@@ -157,7 +156,7 @@ ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "note_off",
                 note: keyToNote[code],
-                instrumentId: 0
+                instrumentId: root.lookup("current_instrument").value()
             })
         }
     })
@@ -189,7 +188,7 @@ Order = function(obsName) {
     this.obsName = obsName;
     this.numPatterns = 0;
     this.sequence = [];
-    this.patterns = {};
+    this.patterns = [];
 }
 }}$;
 
@@ -199,6 +198,19 @@ Sample = function(obsName) {
     this.duration = 0;
     this.filename = "";
     this.sampleRate = 0;
+}
+}}$;
+
+${{
+Synth = function(obsName) {
+    this.obsName = obsName;
+}
+}}$;
+
+${{
+InstrumentList = function(obsName) {
+    this.obsName = obsName;
+    this.instruments = [];
 }
 }}$;
 
@@ -234,13 +246,11 @@ func Order {
     }}$
 }
 
-
-
 func Synth {
     para obsName
     
     ${{
-        return new Sample();
+        return new Synth();
     }}$
 }
 
@@ -251,23 +261,91 @@ func InstrumentList {
     }}$
 }
 
+
+func addSample {
+    ${{
+        const picker = document.getElementById("audio-file-input");
+        picker.onchange = async (e) => {
+             // TODO: Find a way to get this to activate when someone defines a sample
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // console.log(e.target.files);
+            const files = e.target.files;
+            const file = files[0];
+            
+            if(!file) return;
+
+            const buf = await file.arrayBuffer();
+            const data = await root.lookup("ctx").value().decodeAudioData(buf);
+
+            // send audio data to engine
+
+            let left = data.getChannelData(0);
+            let right;
+
+            if (data.numberOfChannels == 2) {
+                right = data.getChannelData(1);
+            } else if (data.numberOfChannels == 1) {
+                right = left;
+            } else {
+                throw new Error("Maximum 2 channels per sample.");
+            }
+
+            // // uncomment this afterwards
+            // root.lookup("engine_node").value().port.postMessage({
+            //    type: "sample",
+            //    filename: file.name,
+            //    numberOfChannels: data.numberOfChannels,
+            //    sampleRate: data.sampleRate,
+            //    duration: data.length,
+            //    data: [left, right],
+            // })
+            
+            console.log({
+                type: "sample",
+                filename: file.name,
+                numberOfChannels: data.numberOfChannels,
+                sampleRate: data.sampleRate,
+                duration: data.length,
+                data: [left, right],
+            })
+        }
+
+        picker.click();
+    }}$
+}
+
 func Sample {
     para obsName
 
-    completed = false;
-    when(completed) {
-        ${{
-            let o = obsName ?? null;
-            return new Sample(o);
-        }}$
-    }
+    createView("hidden", "HTMLContent");
+    view_hidden_title = "Hidden input";
+    view_hidden_content = "<input type='file' id='audio-file-input' accept='audio/*' title='Upload Sample'>"
+    addSample();
+
+    ${{
+        let o = obsName ?? null;
+        return new Sample(o);
+    }}$
 }
 
-
-
-
-# PATTERN FUNCTIONS
 ${{
+    
+}}$
+
+# PATTERN JS FUNCTIONS
+${{
+    const keyToMidi = {
+        "C-": 0,  "C#": 1,
+        "Db": 1,  "D-": 2, "D#": 3,
+        "Eb": 3,  "E-": 4,
+        "F-": 5,  "F#": 6,
+        "Gb": 6,  "G-": 7, "G#": 8,
+        "Ab": 8,  "A-": 9, "A#": 10,
+        "Bb": 10, "B-": 11
+    }
+
     Pattern.prototype.outOfBounds = function(rowNo, columnNo) {
         return rowNo < 0 || rowNo > this.numRows || columnNo < 0 || columnNo > this.numColumns;
     }
@@ -276,15 +354,30 @@ ${{
         this.rows[rowNo][channelNo] = trigger;
     }
 
+    Pattern.prototype.noteToMidi = function(note) {
+        //C-5
+
+        if(note == null) {
+            return -1
+        }
+
+        const semitone = keyToMidi[note.substring(0, 2)]; // C-
+
+        const octave = parseInt(note.at(2));
+
+        return semitone + (octave + 1) * 12;
+    }
+
     Pattern.prototype.flatten = function() {
         const flattened = []
         for (let r = 0; r < this.numRows; r++) {
             for (let c = 0; c < this.numChannels; c++) {
+                // TODO: Convert everything here to int
                 flattened.push(
-                    this.rows[r][c].noteId,
-                    this.rows[r][c].instrumentId,
-                    this.rows[r][c].volume,
-                    this.rows[r][c].effect,
+                    parseInt(this.noteToMidi(this.rows[r][c].noteId)),
+                    parseInt(this.rows[r][c].instrumentId) || -1,
+                    parseInt(this.rows[r][c].volume) || 0,
+                    parseInt(this.rows[r][c].effect) || 0,
                 );
             }
         }
@@ -323,7 +416,7 @@ ${{
     };
 }}$;
 
-# ORDER FUNCTIONS
+# ORDER JS FUNCTIONS
 ${{
     Order.prototype.getPattern = function(patternId) {
         if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
@@ -383,6 +476,22 @@ ${{
         this.sequence.splice(pos, 1);
     }
 
+    Order.prototype.compile = function() {
+        // call this to send data over to engine
+        let data = {};
+        const flattened = []
+        data.sequence = this.sequence;
+        data.numPatterns = this.patterns.length;
+
+        for(let i = 0; i < this.patterns.length; i++) {
+            flattened.push(this.patterns[i].flatten())
+        }
+
+        data.patterns = flattened.flat(2);
+
+        return data;
+    }
+
     Order.prototype.toString = function() {
         return this.getEdenCode();
     }
@@ -394,6 +503,43 @@ ${{
     }
 }}$
 
+# SAMPLE JS FUNCTIONS
+${{
+    Sample.prototype.getWaveform = function() {
+
+    }
+}}$
+
+# INSTRUMENT_LIST JS FUNCTIONS
+${{
+    // TODO: Make this reflect in the engine
+    InstrumentList.prototype.addInstrument = function(inst) {
+        this.instruments.push(inst);
+    }
+
+    InstrumentList.prototype.removeInstrument = function(instId) {
+        if(instId < 0 || instId >= this.instruments.length) return;
+
+        this.instruments.splice(instId, 1);
+    }
+
+    InstrumentList.prototype.popInstrument = function() {
+        if(this.instruments.length == 0) return;
+
+        this.instruments.pop();
+    }
+
+    InstrumentList.prototype.getNumInstruments = function() {
+        return this.instruments.length;
+    }
+}}$
+
+
+## PATTERN JS-EDEN FUNCTIONS
+proc createPattern {
+    para obsName
+    `pattern_{obsName}` = Pattern("pattern_" + obsName);
+}
 
 proc changeCell {
     para pattern, trigger, rowNo, columnNo
@@ -436,6 +582,7 @@ proc setVolume {
     }}$
 }
 
+## ORDER JS-EDEN FUNCTIONS
 proc getPattern {
     para patternId;
     ${{
@@ -450,8 +597,8 @@ proc addPatternToSequence {
     }}$
 }
 
-# WARNING! THIS REMOVES ALL OCCURENCES
 proc removePatternFromSequence {
+    # WARNING! THIS REMOVES ALL PATTERN OCCURENCES IN THE SEQUENCE
     para patternId, pos
     ${{
         root.lookup("pattern_order").value().removePatternToSequence(patternID);
@@ -462,6 +609,14 @@ proc removePattern {
     para patternId;
     ${{
         root.lookup("pattern_order").value().removePattern(patternId);
+    }}$
+}
+
+proc addPatternToOrder {
+    para pattern;
+
+    ${{
+        root.lookup("pattern_order").value().addPattern(pattern);
     }}$
 }
 
@@ -479,100 +634,137 @@ proc setSequence {
     }}$
 }
 
-${{
-    root.lookup("is_playing").addJSObserver("playback_state", (obs, state) => {
-        if(state) {
-            root.lookup("engine_node").value().port.postMessage({
-                type: "playback",
-                value: state,
-                order: root.lookup("pattern_order").value()
-            })
-        }
-    })
-}}$
+## INSTRUMENT JS-EDEN FUNCTIONS
+proc addInstrument {
+    para inst
+    ${{
+        let i = inst;
+
+        root.lookup("instrument_list").value().addInstrument(i);
+    }}$
+}
+
+proc removeInstrument {
+    para instId
+    ${{
+        root.lookup("instrument_list").value().removeInstrument(instId);
+    }}$
+}
+
+proc popInstrument {
+    ${{
+        root.lookup("instrument_list").value().popInstrument();
+    }}$
+}
+
+function getNumInstruments {
+    ${{
+       return root.lookup("instrument_list").value().getNumInstruments();
+    }}$
+}
+
+proc createSample {
+    para obsName
+    smp = Sample(obsName);
+    addInstrument(smp);
+}
+
+proc createSynth {
+    para obsName
+    synth = Synth(obsName);
+    addInstrument(synth);
+}
+
+## SENDING
+
+proc sendOrder {
+    ${{
+        const data = root.lookup("pattern_order").value().compile();
+
+        // root.lookup("engine_node").value().port.postMessage({
+        //     type: "pattern-order",
+        //     sequence: data.sequence,
+        //     patterns: data.patterns,
+        //     numPatterns: data.numPatterns
+        // })
+
+        console.log(
+            {
+                type: "pattern-order",
+                sequence: data.sequence,
+                patterns: data.patterns,
+                numPatterns: data.numPatterns
+            }
+        )
+    }}$
+}
+
+## ACTIONS
 
 action instruments {
-# Define instruments here
-# use Sample() and Synth()
-
+## Define instruments here
+# Use Sample() and Synth(), then add to instruments
 
 
 }
 
 action scratchpad {
-# Make your patterns here
-# Pattern(), Trigger() (make sure the name is matched to the observable name)
+## Make your patterns here
+# Pattern(name), Trigger(name, noteId, instrumentId, volume, effect) (make sure the name is matched to the observable name)
 
-}
-
-action ulsample{
-    createView("upload", "HTMLContent");
-    view_upload_title is "Upload Sample"
-    view_upload_content is "<input type='file' id='audio-file' accept='audio/*' title='Upload Sample'>"
 }
 
 action config {
-# Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
+## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
 bpm = 140;
 rows_per_beat = 4;
 current_order = 0;
 curent_row = 0;
+current_instrument = 0; # used for midi playback, will have zero effect during arrangement playback
+
+sendOrder();
 
 is_playing is false;
 }
 
-
-action setuplisteners {
-    ${{
-        document.getElementById("audio-file").addEventListener("change", async (e) => {
-            // TODO: Find a way to get this to activate when someone defines a sample
-            e.preventDefault();
-            e.stopPropagation();
-
-            const files = event.target.files;
-            const file = files[0];
-            
-            if(!file) return;
-
-            const buf = await file.arrayBuffer();
-            const data = await root.lookup("ctx").value().decodeAudioData(buf);
-
-            // send audio data to engine
-
-            let left = data.getChannelData(0);
-            let right;
-
-            if (data.numberOfChannels == 2) {
-                right = data.getChannelData(1);
-            } else if (data.numberOfChannels == 1) {
-                right = left;
-            } else {
-                throw new Error("Maximum 2 channels per sample.");
-            }
-
-            //root.lookup("engine_node").value().port.postMessage({
-            //    type: "sample",
-            //    filename: file.name,
-            //    numberOfChannels: data.numberOfChannels,
-            //    sampleRate: data.sampleRate,
-            //    duration: data.length,
-            //    data: [left, right],
-            //})
-
-            console.log({
-                type: "sample",
-                filename: file.name,
-                numberOfChannels: data.numberOfChannels,
-                sampleRate: data.sampleRate,
-                duration: data.length,
-                data: [left, right],
+action timing {
+    when(bpm) {
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "bpm",
+                value: root.lookup("bpm").value()
             })
-        })
-    }}$
+        }}$
+    }
+
+    when(rows_per_beat) {
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "rows-per-beat",
+                value: root.lookup("rows_per_beat").value()
+            })
+        }}$
+    }
 }
 
 
+action setuplisteners {
+${{
+    root.lookup("is_playing").addJSObserver("playback_state", (obs, state) => {
+        if(state) {
+            root.lookup("engine_node").value().port.postMessage({
+                type: "playstart",
+                order: root.lookup("pattern_order").value()
+            })
+        } else {
+            root.lookup("engine_node").value().port.postMessage({
+                type: "playpause"
+            })
+        }
+    })
+}}$
+}
 
 # NATIVE EVENT LISTENERS
 
@@ -584,7 +776,7 @@ else createView("safemode","ScriptInput");
 action ACTIVE {
     views_list = ["myscript"];
     view_myscript_type = "ScriptInput";
-    view_myscript_tabs = [":project > config",":project > scratchpad"];
+    view_myscript_tabs = [":project > config",":project > scratchpad", ":project > instruments"];
     view_myscript_current = 0;
     jseden_project_title = "Klaxon";
 
@@ -594,10 +786,12 @@ action ACTIVE {
     current_row = 0;
     rows_per_pattern = 64;
     channels = 8;
+    current_instrument = 0;
 
     is_playing is false;
     pattern_order = Order("pattern_order"); # holds sequencing data
+    instrument_list = InstrumentList("instrument_list");
 
-    do :project > ulsample;
     do :project > setuplisteners;
+    do :project > timing;
 }
