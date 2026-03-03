@@ -20,6 +20,8 @@ func initGainNode {
     }}$;
 }
 
+
+
 # nodes used to play audio
 ctx is initAudioContext();
 gain_node is initGainNode();
@@ -124,6 +126,12 @@ ${{
         const code = e.code;
         if(!keyToNote.hasOwnProperty(code)) return;
 
+        const element = document.activeElement;
+        
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        if(root.lookup("is_playing").value()) return;
+
         if(!keysDown.has(code)) {
             keysDown.add(code);
             root.lookup("engine_node").value().port.postMessage({
@@ -137,6 +145,13 @@ ${{
 
     addEventListener("keyup", (e) => {
         const code = e.code;
+
+        const element = document.activeElement;
+
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        if(root.lookup("is_playing").value()) return;
+        
         if(keyToNote.hasOwnProperty(code)) {
             keysDown.delete(code);
             root.lookup("engine_node").value().port.postMessage({
@@ -169,10 +184,31 @@ Pattern = function(obsName) {
 }
 }}$;
 
+${{
+Order = function(obsName) {
+    this.obsName = obsName;
+    this.numPatterns = 0;
+    this.sequence = [];
+    this.patterns = {};
+}
+}}$;
+
+${{
+Sample = function(obsName) {
+    this.obsName = obsName;
+    this.duration = 0;
+    this.filename = "";
+    this.sampleRate = 0;
+}
+}}$;
+
+# DEFINITIONS
+
 func Pattern {
-    para observableName;
+    para obsName;
     ${{
-        return new Pattern(arguments[0]);
+        let o = obsName ?? null;
+        return new Pattern(o);
     }}$;
 }
 
@@ -189,61 +225,175 @@ func Trigger {
     }}$
 }
 
+func Order {
+    para obsName
+    ${{
+        let o = obsName ?? null;
+
+        return new Order(o);
+    }}$
+}
+
+
+
+func Synth {
+    para obsName
+    
+    ${{
+        return new Sample();
+    }}$
+}
+
+func InstrumentList {
+    para obsName
+    ${{
+        return new InstrumentList();
+    }}$
+}
+
+func Sample {
+    para obsName
+
+    completed = false;
+    when(completed) {
+        ${{
+            let o = obsName ?? null;
+            return new Sample(o);
+        }}$
+    }
+}
+
+
+
+
+# PATTERN FUNCTIONS
 ${{
-Pattern.prototype.outOfBounds = function(rowNo, columnNo) {
-    return rowNo < 0 || rowNo > this.numRows || columnNo < 0 || columnNo > this.numColumns;
-}
+    Pattern.prototype.outOfBounds = function(rowNo, columnNo) {
+        return rowNo < 0 || rowNo > this.numRows || columnNo < 0 || columnNo > this.numColumns;
+    }
 
-Pattern.prototype.changeCell = function(rowNo, channelNo, trigger) {
-    this.rows[rowNo][channelNo] = trigger;
-}
+    Pattern.prototype.changeCell = function(rowNo, channelNo, trigger) {
+        this.rows[rowNo][channelNo] = trigger;
+    }
 
-Pattern.prototype.flatten = function() {
-    const flattened = []
-    for (let r = 0; r < this.numRows; r++) {
-        for (let c = 0; c < this.numChannels; c++) {
-            flattened.push(
-                this.rows[r][c].noteId,
-                this.rows[r][c].instrumentId,
-                this.rows[r][c].volume,
-                this.rows[r][c].effect,
-            );
+    Pattern.prototype.flatten = function() {
+        const flattened = []
+        for (let r = 0; r < this.numRows; r++) {
+            for (let c = 0; c < this.numChannels; c++) {
+                flattened.push(
+                    this.rows[r][c].noteId,
+                    this.rows[r][c].instrumentId,
+                    this.rows[r][c].volume,
+                    this.rows[r][c].effect,
+                );
+            }
+        }
+
+        return flattened;
+    }
+
+    Pattern.prototype.clear = function() {
+        for(let r = 0; r < this.numRows; r++) {
+            this.rows[r] = []
+            for (let c = 0; c < this.numChannels; c++) {
+                this.rows[r][c] = new Trigger(null, null, null, null, null);
+            }
+        }  
+    }
+
+    Pattern.prototype.getCell = function(rowNo, columnNo) {
+        // doesn't exist
+
+        return this.rows[rowNo][columnNo];
+    }
+
+    Pattern.prototype.changeVolume = function(vol, rowNo, columnNo) {
+        if(!p.outOfBounds)
+            p.rows[rowNo][columnNo].volume = vol;
+    }
+
+    Pattern.prototype.toString = function() {
+        return this.getEdenCode();
+    };
+
+    Pattern.prototype.getEdenCode = function () {
+        var s = "Pattern(" + Eden.edenCodeForValues(
+            this.obsName, this.numRows)+")";
+        return s;
+    };
+}}$;
+
+# ORDER FUNCTIONS
+${{
+    Order.prototype.getPattern = function(patternId) {
+        if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
+
+        return this.patterns[patternId]; 
+    }
+
+    Order.prototype.addPattern = function(pattern) {
+        this.patterns.push(pattern);
+    }
+
+    Order.prototype.removePattern = function(patternId) {
+        // first check if the pattern is referenced in the sequence
+
+        if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
+
+        for(let i = 0; i < this.sequence.length; i++) {
+            if(this.sequence[i] == patternId) return; // it has been
+        }
+
+        this.patterns.splice(patternId, 1); // remove the single pattern
+
+        for(let i = 0; i < this.sequence.length; i++) {
+            if(this.sequence[i] > patternId) this.sequence[i]--;
         }
     }
 
-    return flattened;
-}
+    Order.prototype.removePatternFromSequence = function(patternId) {
+        if (!this.sequence.includes(patternId)) return;
 
-Pattern.prototype.clear = function() {
-    for(let r = 0; r < this.numRows; r++) {
-        this.rows[r] = []
-        for (let c = 0; c < this.numChannels; c++) {
-            this.rows[r][c] = new Trigger(null, null, null, null, null);
+        this.sequence.filter(
+            (entry) => entry != patternId
+        );
+    }
+
+    Order.prototype.setSequence = function(seq) {
+        if(!Array.isArray(seq)) return;
+
+        for(let i = 0; i < seq.length; i++) {
+            const x = Number(seq[i]);
+            if(!Number.isInteger(x)) return;
+            if(x < 0 || x >= this.patterns.length) return;
         }
-    }  
-}
+        
+        this.sequence = seq;
+    }
 
-Pattern.prototype.getCell = function(rowNo, columnNo) {
-     // doesn't exist
+    Order.prototype.addPatternToSequence = function(patternId, pos) {
+        if(patternId < 0 || patternId >= this.patterns.length || pos < 0) return; // out of bounds
 
-    return this.rows[rowNo][columnNo];
-}
+        this.sequence.splice(pos, 0, patternId);
+    }
 
-Pattern.prototype.toString = function() {
-	return this.getEdenCode();
-};
+    Order.prototype.removeEntryFromSequence = function(pos) {
+        if(pos < 0 || pos >= this.sequence.length) return; // out of bounds
 
-Pattern.prototype.getEdenCode = function () {
-	var s = "Pattern(" + Eden.edenCodeForValues(
-        this.obsName, this.numRows)+")";
-	return s;
-};
+        this.sequence.splice(pos, 1);
+    }
 
-Pattern.prototype.changeVolume = function(vol, rowNo, columnNo) {
-    if(!p.outOfBounds)
-        p.rows[rowNo][columnNo].volume = vol;
-}
-}}$;
+    Order.prototype.toString = function() {
+        return this.getEdenCode();
+    }
+
+    Order.prototype.getEdenCode = function () {
+        var s = "Order(" + Eden.edenCodeForValues(
+            this.obsName)+")";
+        return s;
+    }
+}}$
+
 
 proc changeCell {
     para pattern, trigger, rowNo, columnNo
@@ -286,33 +436,145 @@ proc setVolume {
     }}$
 }
 
+proc getPattern {
+    para patternId;
+    ${{
+        root.lookup("pattern_order").value().getPattern(patternId);
+    }}$
+}
+
+proc addPatternToSequence {
+    para patternId, pos
+    ${{
+        root.lookup("pattern_order").value().addPatternToSequence(patternId, pos);
+    }}$
+}
+
+# WARNING! THIS REMOVES ALL OCCURENCES
+proc removePatternFromSequence {
+    para patternId, pos
+    ${{
+        root.lookup("pattern_order").value().removePatternToSequence(patternID);
+    }}$
+}
+
+proc removePattern {
+    para patternId;
+    ${{
+        root.lookup("pattern_order").value().removePattern(patternId);
+    }}$
+}
+
+proc removeEntryFromSequence {
+    para pos
+    ${{
+        root.lookup("pattern_order").value().removeEntryFromSequence(pos);
+    }}$
+}
+
+proc setSequence {
+    para seq
+    ${{
+        root.lookup("pattern_order").value().setSequence(seq);
+    }}$
+}
+
 ${{
     root.lookup("is_playing").addJSObserver("playback_state", (obs, state) => {
         if(state) {
             root.lookup("engine_node").value().port.postMessage({
                 type: "playback",
                 value: state,
-                order: root.lookup("order").value()
+                order: root.lookup("pattern_order").value()
             })
         }
     })
 }}$
 
+action instruments {
+# Define instruments here
+# use Sample() and Synth()
+
+
+
+}
+
 action scratchpad {
-    # make your patterns here
+# Make your patterns here
+# Pattern(), Trigger() (make sure the name is matched to the observable name)
+
+}
+
+action ulsample{
+    createView("upload", "HTMLContent");
+    view_upload_title is "Upload Sample"
+    view_upload_content is "<input type='file' id='audio-file' accept='audio/*' title='Upload Sample'>"
 }
 
 action config {
-# global variables used by js-eden to know 
-# the current position of playback in the audio engine
+# Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
 bpm = 140;
 rows_per_beat = 4;
-current_pattern = 0;
+current_order = 0;
 curent_row = 0;
 
 is_playing is false;
 }
+
+
+action setuplisteners {
+    ${{
+        document.getElementById("audio-file").addEventListener("change", async (e) => {
+            // TODO: Find a way to get this to activate when someone defines a sample
+            e.preventDefault();
+            e.stopPropagation();
+
+            const files = event.target.files;
+            const file = files[0];
+            
+            if(!file) return;
+
+            const buf = await file.arrayBuffer();
+            const data = await root.lookup("ctx").value().decodeAudioData(buf);
+
+            // send audio data to engine
+
+            let left = data.getChannelData(0);
+            let right;
+
+            if (data.numberOfChannels == 2) {
+                right = data.getChannelData(1);
+            } else if (data.numberOfChannels == 1) {
+                right = left;
+            } else {
+                throw new Error("Maximum 2 channels per sample.");
+            }
+
+            //root.lookup("engine_node").value().port.postMessage({
+            //    type: "sample",
+            //    filename: file.name,
+            //    numberOfChannels: data.numberOfChannels,
+            //    sampleRate: data.sampleRate,
+            //    duration: data.length,
+            //    data: [left, right],
+            //})
+
+            console.log({
+                type: "sample",
+                filename: file.name,
+                numberOfChannels: data.numberOfChannels,
+                sampleRate: data.sampleRate,
+                duration: data.length,
+                data: [left, right],
+            })
+        })
+    }}$
+}
+
+
+
+# NATIVE EVENT LISTENERS
 
 do lib:unexecuted;
 if (jseden_project_mode == "restore") do :project > ACTIVE;
@@ -328,10 +590,14 @@ action ACTIVE {
 
     bpm = 140;
     rows_per_beat = 4;
-    current_pattern = 0;
+    current_order = 0;
     current_row = 0;
     rows_per_pattern = 64;
     channels = 8;
 
     is_playing is false;
+    pattern_order = Order("pattern_order"); # holds sequencing data
+
+    do :project > ulsample;
+    do :project > setuplisteners;
 }
