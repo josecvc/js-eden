@@ -13,4 +13,11 @@ struct Trigger
 
 };
 
-struct
+class Pattern
+{
+    static constexpr int MAX_ROWS = 64;
+    static constexpr int MAX_CHANNELS = 8;
+    Row rows[MAX_ROWS * MAX_CHANNELS];
+};
+
+#endif
