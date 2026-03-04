@@ -313,7 +313,7 @@ ${{
         //C-5
 
         if(note == null) {
-            return -1
+            return 0
         }
 
         const semitone = keyToMidi[note.substring(0, 2)]; // C-
@@ -327,10 +327,10 @@ ${{
         const flattened = []
         for (let r = 0; r < this.numRows; r++) {
             for (let c = 0; c < this.numChannels; c++) {
-                // TODO: Convert everything here to one single integer
+                // Convert everything here to one single 32-bit integer
                 flattened.push(
-                    (parseInt(this.noteToMidi(this.rows[r][c].noteId)) & 0xFF) |
-                    (((parseInt(this.rows[r][c].instrumentId) || -1) & 0xFF) << 8) |
+                    ((parseInt(this.noteToMidi(this.rows[r][c].noteId)) || 0) & 0xFF) |
+                    (((parseInt(this.rows[r][c].instrumentId) || 0) & 0xFF) << 8) |
                     (((parseInt(this.rows[r][c].volume) || 0) & 0xFF) << 16) |
                     (((parseInt(this.rows[r][c].effect) || 0) & 0xFF) << 24)
                 );
@@ -381,6 +381,7 @@ ${{
 
     Order.prototype.addPattern = function(pattern) {
         this.patterns.push(pattern);
+        this.numPatterns++;
     }
 
     Order.prototype.removePattern = function(patternId) {
@@ -393,6 +394,7 @@ ${{
         }
 
         this.patterns.splice(patternId, 1); // remove the single pattern
+        this.numPatterns--;
 
         for(let i = 0; i < this.sequence.length; i++) {
             if(this.sequence[i] > patternId) this.sequence[i]--;
@@ -554,9 +556,9 @@ proc addPatternToSequence {
 
 proc removePatternFromSequence {
     # WARNING! THIS REMOVES ALL PATTERN OCCURENCES IN THE SEQUENCE
-    para patternId, pos
+    para patternId
     ${{
-        root.lookup("pattern_order").value().removePatternToSequence(patternID);
+        root.lookup("pattern_order").value().removePatternFromSequence(patternID);
     }}$
 }
 
@@ -571,7 +573,7 @@ proc addPatternToOrder {
     para pattern;
 
     ${{
-        root.lookup("pattern_order").value().addPattern();
+        root.lookup("pattern_order").value().addPattern(pattern);
     }}$
 }
 
@@ -636,31 +638,23 @@ proc sendOrder {
     ${{
         const data = root.lookup("pattern_order").value().compile();
 
-        // root.lookup("engine_node").value().port.postMessage({
-        //     type: "pattern-order",
-        //     sequence: data.sequence,
-        //     patterns: data.patterns,
-        //     numPatterns: data.numPatterns
-        // })
+        root.lookup("engine_node").value().port.postMessage({
+            type: "pattern-order",
+            sequence: data.sequence,
+            numIndices: data.sequence.length,
+            patterns: data.patterns,
+            numPatterns: data.numPatterns
+        })
 
-        const NUM_ROWS = 64;
-        const NUM_CHANNELS = 8;
-
-        const sharedSeqBuf = new SharedArrayBuffer(data.sequence.length * 4);
-        const seqArray = new Uint32Array(sharedSeqBuf);
-
-        const sharedPatBuf = new SharedArrayBuffer(data.numPatterns * NUM_ROWS * NUM_CHANNELS * 4);
-        const patArray = new Uint32Array(sharedPatBuf);
-        
-        console.log(
-            {
-                type: "pattern-order",
-                sequence: sharedSeqBuf,
-                numIndices: data.sequence.length,
-                patterns: sharedPatBuf,
-                numPatterns: data.numPatterns
-            }
-        )
+        // console.log(
+        //     {
+        //         type: "pattern-order",
+        //         sequence: data.sequence,
+        //         numIndices: data.sequence.length,
+        //         patterns: data.patterns,
+        //         numPatterns: data.numPatterns
+        //     }
+        // )
     }}$
 }
 
@@ -677,6 +671,11 @@ action scratchpad {
 ## Make your patterns here
 # Pattern(name), Trigger(name, noteId, instrumentId, volume, effect) (make sure the name is matched to the observable name)
 
+createPattern("patternOne");
+tri = Trigger("tri", "C-5", 1, 64, 0);
+changeCell(pattern_patternOne, tri, 0, 0);
+addPatternToOrder(pattern_patternOne);
+addPatternToSequence(0, 0);
 }
 
 action config {
@@ -686,7 +685,7 @@ bpm = 140;
 rows_per_beat = 4;
 current_order = 0;
 curent_row = 0;
-current_instrument = 0; # used for midi playback, will have zero effect during arrangement playback
+current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
 
 sendOrder(); # use this to send order and pattern information to the engine for playback
 
@@ -751,7 +750,7 @@ action ACTIVE {
     current_row = 0;
     rows_per_pattern = 64;
     channels = 8;
-    current_instrument = 0;
+    current_instrument = 1;
 
     is_playing is false;
     pattern_order = Order("pattern_order"); # holds sequencing data

@@ -1,9 +1,7 @@
 const importObject = {
     env: {
         memory: new WebAssembly.Memory({
-                    initial: 256,
-                    maximum: 256,
-                    shared: true
+                    initial: 256
                 }),
         table: new WebAssembly.Table({ initial: 0, element: "anyfunc" }),
         abort: () => { throw new Error("WASM abort"); }
@@ -24,7 +22,7 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.playMidi(msg);
             } else if (msg.type == "note_off") {
                 this.stopMidi(msg);
-            } else if (msg.type == "patten-order") {
+            } else if (msg.type == "pattern-order") {
                 this.setOrder(msg);
             } else if (msg.type == "bpm") {
                 this.setBPM(msg);
@@ -129,56 +127,58 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     playMidi(msg) {
+        if(msg.instrumentId <= 0) return;
         // int play_from_midi(Engine* engine, int instrument_id, int note_id)
         const res = this.wasm.exports.play_from_midi(this.enginePtr, msg.instrumentId, msg.note);
         console.log(res);
     }
 
     stopMidi(msg) {
-        console.log(msg);
+        const res = this.wasm.exports.stop_midi(this.enginePtr, msg.instrumentId);
     }
 
     setOrder(msg) {        
         // pointers and heaps to memory
-        // const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
-        // const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
+        const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
+        const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
 
-        // const sequenceHeap = new Int32Array(
-        //     this.wasm.exports.memory.buffer,
-        //     sequencePtr,
-        //     msg.sequence.length
-        // );
+        const sequenceHeap = new Int32Array(
+            this.wasm.exports.memory.buffer,
+            sequencePtr,
+            msg.sequence.length
+        );
 
-        // const patternHeap = new Int32Array(
-        //     this.wasm.exports.memory.buffer,
-        //     patternPtr,
-        //     msg.patterns.length
-        // );
+        const patternHeap = new Int32Array(
+            this.wasm.exports.memory.buffer,
+            patternPtr,
+            msg.patterns.length
+        );
 
-        // sequenceHeap.set(msg.sequence);
-        // patternHeap.set(msg.patterns);
+        sequenceHeap.set(msg.sequence);
+        patternHeap.set(msg.patterns);
 
+        console.log("From First");
         // int read_order(Engine* engine, int* sequence, int sequence_length, int* patterns, int pattern_length)
+        const res = this.wasm.exports.read_order(this.enginePtr, sequencePtr, msg.numIndices, patternPtr, msg.numPatterns);
 
-        this.seqView = new Uint32Array(msg.sequence); 
-        this.patView = new Uint32Array(msg.patterns);
+        console.log("To Last");
+        this.wasm.exports.free(sequencePtr);
+        this.wasm.exports.free(patternPtr);
 
-        const res = this.wasm.exports.read_order(this.enginePtr, this.seqView.byteOffset, msg.numIndices, this.patView.byteOffset, msg.numPatterns);
-
-        // this.wasm.exports.free(sequencePtr);
-        // this.wasm.exports.free(patternPtr);
+        console.log(res);
     }
 
     setBPM(msg) {
-
+        this.wasm.exports.set_bpm(msg.value);
     }
 
     setRPB(msg) {
-
+        this.wasm.exports.set_rpb(msg.value);
     }
 
     setPlay(msg) {
-
+        // void play_track(Engine* engine, int order, int row)
+        this.wasm.exports.play_track(this.enginePtr, 0, 0);
     }
 
     setPause(msg) {
@@ -192,12 +192,21 @@ class MixerProcessor extends AudioWorkletProcessor {
 
         // int process(Engine* engine, float* output, int length)
         const beat = this.wasm.exports.process(this.enginePtr, this.outputTablePtr, n);
+        const voices = this.wasm.exports.get_num_voices(this.enginePtr);
+        const curr_row = this.wasm.exports.get_current_row(this.enginePtr);
+
+        console.log(curr_row);
+        
+        if(voices >= 1) {
+            console.log(voices + " voice(s)");
+        }
 
         // turn off
         if(beat == -1) this.playing = false;
 
         // we detect a beat and so update row count
         if(beat == 1) {
+            console.log("hit!!")
             this.rowNo++;
         }
 
@@ -208,13 +217,6 @@ class MixerProcessor extends AudioWorkletProcessor {
         
         outs[0][0].set(this.leftHeap);
         outs[0][1].set(this.rightHeap);
-
-        if( outs[0][0][0] != 0 && outs[0][1][0] != 0 && !this.test) {
-            console.log({left: outs[0][0], right: outs[0][1]});
-            this.test = true;
-        }
-
-            
 
         return true;
     }

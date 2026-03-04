@@ -28,7 +28,18 @@ target_link_options(dsp PRIVATE
         '_init_engine', 
         '_process',
         '_add_sample',
-        '_play_from_midi'
+        '_play_from_midi',
+        '_read_order',
+        '_play_track',
+        '_pause_track',
+        '_stop_track',
+        '_set_bpm',
+        '_set_sample_rate',
+        '_set_rows_per_beat',
+        '_get_num_voices',
+        '_get_instrument_id_from_channel',
+        '_get_note_id_from_channel',
+        '_get_current_row'
     ]"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"

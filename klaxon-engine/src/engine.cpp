@@ -7,6 +7,9 @@ void Engine::init(int sample_rate, int bpm, int rows_per_beat)
     this->rows_per_beat = rows_per_beat;
 
     this->samples_per_row = static_cast<float>(sample_rate) * 60.f / bpm / rows_per_beat;
+    this->current_row = 0;
+    this->current_pattern = 0;
+    this->current_order = 0;
 }
 
 int Engine::process(float** output, int frames)
@@ -14,16 +17,17 @@ int Engine::process(float** output, int frames)
     clear(output, frames);
 
     int is_hit = -1; // assume no playback
-    
+
     if(is_playing) {
         is_hit = step(frames);
 
-        if(is_hit) // only process if the step encounters a hit
+        if(is_hit) { // only process if the step encounters a hit
             process_row();
+        }
     }
-    
-    mix_instruments(output, frames);
 
+    mix_instruments(output, frames);
+    
     return is_hit;
 }
 
@@ -79,19 +83,21 @@ void Engine::process_row()
 
     auto& ptrn = order.patterns[current_pattern];
 
-    for (int ch = 0; ch < MAX_CHANNELS; ch++)
+    for (int ch = 0; ch < 1; ch++)
     {
         auto& cell = ptrn.rows[current_row][ch];
-        if(cell.instrumentId >= instruments.size() || cell.noteId < 12 || cell.noteId > 119) continue;
+        if(cell.instrumentId > instruments.size() || cell.noteId < 12 || cell.noteId > 119 || cell.instrumentId < 1) continue;
 
         // channels are 1-indexed (MIDI is taking channel 0)
-        poly.add_voice(ch % MAX_CHANNELS + 1, cell.noteId, cell.instrumentId, cell.volume, 72); // "72" needs to be changed afterwards
+        // instruments are 1-indexed (0 means no instrument in cell)
+        poly.add_voice(ch + 1, cell.noteId, cell.instrumentId - 1, cell.volume, 72); // "72" needs to be changed afterwards
     }
 }
 
 void Engine::advance_row()
-{
-    if (++current_row > MAX_ROWS - 1) { // 0 -> (MAX_ROWS - 1)
+{   
+    current_row++;
+    if (current_row > MAX_ROWS - 1) { // 0 -> (MAX_ROWS - 1)
         current_row = 0;
 
         if(++current_order >= order.sequence_length) {
@@ -106,7 +112,7 @@ void Engine::advance_row()
     }
 }
 
-void Engine::insert_order(int* patterns, int num_patterns, int* sequence, int num_indices)
+void Engine::insert_order(int* sequence, int num_indices, int* patterns, int num_patterns)
 {   
     // instantiate patterns and sequences
 
@@ -138,14 +144,24 @@ void Engine::insert_order(int* patterns, int num_patterns, int* sequence, int nu
 
         order.patterns[p] = pat;
     }
+
+    order.num_patterns = num_patterns;
+    order.sequence_length = num_indices;
 }
 
-void Engine::play(int row_no)
+void Engine::play(int order_num, int row_num)
 {   
-    if (int apparent_samples = row_no * samples_per_row; apparent_samples != current_samples) 
+    int apparent_samples = samples_per_row * row_num + MAX_ROWS * samples_per_row * order_num;
+    if (apparent_samples != current_samples) 
         current_samples = apparent_samples;
 
     is_playing = true;
+
+    current_order = order_num;
+    current_row = row_num;
+    current_pattern = order.sequence[order_num];
+
+    process_row();
 }
 
 void Engine::pause()
@@ -226,10 +242,10 @@ extern "C"
         return engine->process(output, frames);
     }
 
-    void play_track(Engine* engine, int elapsed_rows)
+    void play_track(Engine* engine, int order, int row)
     {
         if (!engine) return;
-        engine->play(elapsed_rows);
+        engine->play(order, row);
     }
 
     void pause_track(Engine* engine)
@@ -267,9 +283,6 @@ extern "C"
         if (!engine) return -1;
         engine->add_sample(filename, left, right, sample_rate, length);
 
-        // free(left);
-        // free(right);
-
         return 0;
     }
 
@@ -282,19 +295,47 @@ extern "C"
     int play_from_midi(Engine* engine, int instrument_id, int note_id)
     {
         if (!engine) return -2;
-        if(instrument_id >= engine->instruments.size()) return -1;
-        engine->poly.add_voice(0, note_id, instrument_id, 1.0f, 72);
+        if(instrument_id > engine->instruments.size() || instrument_id < 1) return -1;
+        engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
 
         return 0;
     }
 
-    int read_order(Engine* engine, int* patterns, int num_patterns, int* sequence, int num_indices)
+    int read_order(Engine* engine, int* sequence, int num_indices, int* patterns, int num_patterns)
     {
         if (!engine) return -2;
 
-        engine->insert_order(patterns, num_patterns, sequence, num_indices);
+        engine->insert_order(sequence, num_indices, patterns, num_patterns);
 
         return 0;
+    }
+
+    int get_num_voices(Engine* engine)
+    {
+        if (!engine) return -2;
+
+        return engine->poly.get_current_voices();
+    }
+
+    // DEBUG FUNCTIONS
+    int get_instrument_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
+    {
+        if (!engine) return -2;
+        if(pattern_id < 0 || pattern_id >= engine->order.num_patterns) return -1;
+        return engine->order.patterns->rows[row_id][channel_id].instrumentId;
+    }
+
+    int get_note_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
+    {
+        if (!engine) return -2;
+        if(pattern_id < 0 || pattern_id >= engine->order.num_patterns) return -1;
+        return engine->order.patterns->rows[row_id][channel_id].noteId;
+    }
+    
+    int get_current_row(Engine* engine)
+    {
+        if (!engine) return -2;
+        return engine->current_row;
     }
 
     //TODO: Finish WebAssembly functions

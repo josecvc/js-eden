@@ -28,7 +28,7 @@ public:
 
     // playback mutation
     void insert_order(int* patterns, int num_patterns, int* sequence, int num_indices);
-    void play(int total_rows);
+    void play(int order, int row);
     void pause();
     void stop();
     
@@ -51,9 +51,9 @@ public:
 
     // playback state
     bool is_playing{false};
-    unsigned short current_row;
-    unsigned short current_order;
-    unsigned short current_pattern;
+    short current_row;
+    short current_order;
+    short current_pattern;
 
     int instrument_count; // use this if you intend on switching to Instrument[MAX_INSTRUMENTS]
     
