@@ -23,7 +23,7 @@ struct Order {
     unsigned short sequence_length;
 
     Pattern* patterns;
-    unsigned short* sequence;
+    int* sequence;
 };
 
 #endif

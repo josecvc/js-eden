@@ -106,6 +106,40 @@ void Engine::advance_row()
     }
 }
 
+void Engine::insert_order(int* patterns, int num_patterns, int* sequence, int num_indices)
+{   
+    // instantiate patterns and sequences
+
+    order.patterns = new Pattern[num_patterns];
+    order.sequence = new int[num_indices];
+
+    for(int i = 0; i < num_indices; i++)
+    {
+        order.sequence[i] = sequence[i];
+    }
+
+    // retrieve pattern from MAX_CHANNELS * MAX_ROWS * p + MAX_CHANNELS * r + ch
+    for(int p = 0; p < num_patterns; p++)
+    {
+        Pattern pat;
+        // for each pattern fill the grid
+        for(int r = 0; r < MAX_ROWS; r++)
+        {   
+            for (int ch = 0; ch < MAX_CHANNELS; ch++)
+            {   int loc = MAX_CHANNELS * MAX_ROWS * p + MAX_CHANNELS * r + ch;
+                
+                auto& cell_data = patterns[loc];
+                pat.rows[r][ch].noteId =         cell_data        & 0xFF;
+                pat.rows[r][ch].instrumentId =  (cell_data >> 8)  & 0xFF;
+                pat.rows[r][ch].volume =        (cell_data >> 16) & 0xFF;
+                pat.rows[r][ch].effectId =      (cell_data >> 24) & 0xFF;
+            }
+        }
+
+        order.patterns[p] = pat;
+    }
+}
+
 void Engine::play(int row_no)
 {   
     if (int apparent_samples = row_no * samples_per_row; apparent_samples != current_samples) 

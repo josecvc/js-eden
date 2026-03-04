@@ -1,6 +1,10 @@
 const importObject = {
     env: {
-        memory: new WebAssembly.Memory({ initial: 256 }),
+        memory: new WebAssembly.Memory({
+                    initial: 256,
+                    maximum: 256,
+                    shared: true
+                }),
         table: new WebAssembly.Table({ initial: 0, element: "anyfunc" }),
         abort: () => { throw new Error("WASM abort"); }
     }
@@ -39,6 +43,8 @@ class MixerProcessor extends AudioWorkletProcessor {
         WebAssembly.instantiate(msg.wasm, importObject)
             .then((obj) => {
                 this.wasm = obj.instance
+
+                
 
                 // TODO: Add pattern data
                 
@@ -134,29 +140,33 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     setOrder(msg) {        
         // pointers and heaps to memory
-        const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
-        const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
+        // const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
+        // const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
 
-        const sequenceHeap = new Int32Array(
-            this.wasm.exports.memory.buffer,
-            sequencePtr,
-            msg.sequence.length
-        );
+        // const sequenceHeap = new Int32Array(
+        //     this.wasm.exports.memory.buffer,
+        //     sequencePtr,
+        //     msg.sequence.length
+        // );
 
-        const patternHeap = new Int32Array(
-            this.wasm.exports.memory.buffer,
-            patternPtr,
-            msg.patterns.length
-        );
+        // const patternHeap = new Int32Array(
+        //     this.wasm.exports.memory.buffer,
+        //     patternPtr,
+        //     msg.patterns.length
+        // );
 
-        sequenceHeap.set(msg.sequence);
-        patternHeap.set(msg.patterns);
+        // sequenceHeap.set(msg.sequence);
+        // patternHeap.set(msg.patterns);
 
         // int read_order(Engine* engine, int* sequence, int sequence_length, int* patterns, int pattern_length)
-        const res = this.wasm.exports.read_order(this.enginePtr, sequencePtr, msg.sequence.length, patternPtr, msg.patterns.length);
 
-        this.wasm.exports.free(sequencePtr);
-        this.wasm.exports.free(patternPtr);
+        this.seqView = new Uint32Array(msg.sequence); 
+        this.patView = new Uint32Array(msg.patterns);
+
+        const res = this.wasm.exports.read_order(this.enginePtr, this.seqView.byteOffset, msg.numIndices, this.patView.byteOffset, msg.numPatterns);
+
+        // this.wasm.exports.free(sequencePtr);
+        // this.wasm.exports.free(patternPtr);
     }
 
     setBPM(msg) {

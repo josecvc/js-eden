@@ -27,7 +27,7 @@ public:
     void advance_row();
 
     // playback mutation
-    void insert_order();
+    void insert_order(int* patterns, int num_patterns, int* sequence, int num_indices);
     void play(int total_rows);
     void pause();
     void stop();
