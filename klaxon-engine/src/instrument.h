@@ -38,7 +38,7 @@ public:
     void render(float** output, int frames) override;
 
     WaveTable wave_table;
-    SynthPolyphony poly;    
+    SynthPolyphony poly;   
 };
 
 #endif

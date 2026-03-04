@@ -56,41 +56,6 @@ ${{
         };
 
         root.lookup("engine_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
-
-        // Test code for uploading samples to WebAssembly memory
-        // fetch("../../klaxon-engine/assets/Cumulus Break.wav").then(async (res) => {
-        //     const url = res.url;
-        //     const filename = decodeURIComponent(url.split("/").pop());
-        //     const buf = await res.arrayBuffer();
-
-        //     return {filename: filename, buffer: buf};
-        // }).then(async (payload) => {
-        //     const buf = await root.lookup("ctx").value().decodeAudioData(payload.buffer);
-        //     return {filename: payload.filename, data: buf};
-        // }).then((decoded) => {
-        //     const data = decoded.data;
-
-        //     let left = data.getChannelData(0);
-        //     let right;
-
-        //     if (data.numberOfChannels == 2) {
-        //         right = data.getChannelData(1);
-        //     } else if (data.numberOfChannels == 1) {
-        //         right = left;
-        //     } else {
-        //         throw new Error("Maximum 2 channels per sample.");
-        //     }
-
-        //     root.lookup("engine_node").value().port.postMessage({
-        //         type: "sample",
-        //         filename: decoded.filename,
-        //         numberOfChannels: data.numberOfChannels,
-        //         sampleRate: data.sampleRate,
-        //         duration: data.length,
-        //         data: [left, right],
-        //     })
-        // })
-
     }).catch((e) => {
         console.log("Error: Audio Processor failed to initialise.\n" + e);
     });
@@ -99,25 +64,25 @@ ${{
 ${{
     const keysDown = new Set();
     const transpose = 12;
-    const multiplier = 0;
+    const multiplier = 1;
     const keyToNote = { // just to sample
-    "KeyQ" :   40 + transpose*multiplier, // C 4
-    "Digit2" : 41 + transpose*multiplier, // C# 4/Db 4
-    "KeyW" :   42 + transpose*multiplier, // D 4
-    "Digit3" : 43 + transpose*multiplier, // D# 4/Eb 4
-    "KeyE" :   44 + transpose*multiplier, // E 4
-    "KeyR" :   45 + transpose*multiplier, // F 4
-    "Digit5" : 46 + transpose*multiplier, // F# 4/Gb 4
-    "KeyT" :   47 + transpose*multiplier, // G 4
-    "Digit6" : 48 + transpose*multiplier, // G# 4/Ab 4
-    "KeyY" :   49 + transpose*multiplier, // A 4
-    "Digit7" : 50 + transpose*multiplier, // A# 4/Bb 4
-    "KeyU" :   51 + transpose*multiplier, // B 4
-    "KeyI" :   52 + transpose*multiplier, // C 5
-    "Digit9" : 53 + transpose*multiplier, // C# 5/Db 5
-    "KeyO" :   54 + transpose*multiplier, // D 5
-    "Digit0" : 55 + transpose*multiplier, // D# 5/ Eb 5
-    "KeyP" :   56 + transpose*multiplier // E
+    "KeyQ" :   60 + transpose*multiplier, // C 4
+    "Digit2" : 61 + transpose*multiplier, // C# 4/Db 4
+    "KeyW" :   62 + transpose*multiplier, // D 4
+    "Digit3" : 63 + transpose*multiplier, // D# 4/Eb 4
+    "KeyE" :   64 + transpose*multiplier, // E 4
+    "KeyR" :   65 + transpose*multiplier, // F 4
+    "Digit5" : 66 + transpose*multiplier, // F# 4/Gb 4
+    "KeyT" :   67 + transpose*multiplier, // G 4
+    "Digit6" : 68 + transpose*multiplier, // G# 4/Ab 4
+    "KeyY" :   69 + transpose*multiplier, // A 4
+    "Digit7" : 70 + transpose*multiplier, // A# 4/Bb 4
+    "KeyU" :   71 + transpose*multiplier, // B 4
+    "KeyI" :   72 + transpose*multiplier, // C 5
+    "Digit9" : 73 + transpose*multiplier, // C# 5/Db 5
+    "KeyO" :   74 + transpose*multiplier, // D 5
+    "Digit0" : 75 + transpose*multiplier, // D# 5/ Eb 5
+    "KeyP" :   76 + transpose*multiplier // E
     }
 
 
@@ -257,7 +222,7 @@ func Synth {
 func InstrumentList {
     para obsName
     ${{
-        return new InstrumentList();
+        return new InstrumentList(obsName);
     }}$
 }
 
@@ -292,24 +257,24 @@ func addSample {
                 throw new Error("Maximum 2 channels per sample.");
             }
 
-            // // uncomment this afterwards
-            // root.lookup("engine_node").value().port.postMessage({
-            //    type: "sample",
-            //    filename: file.name,
-            //    numberOfChannels: data.numberOfChannels,
-            //    sampleRate: data.sampleRate,
-            //    duration: data.length,
-            //    data: [left, right],
-            // })
-            
-            console.log({
-                type: "sample",
-                filename: file.name,
-                numberOfChannels: data.numberOfChannels,
-                sampleRate: data.sampleRate,
-                duration: data.length,
-                data: [left, right],
+            // uncomment this afterwards
+            root.lookup("engine_node").value().port.postMessage({
+               type: "sample",
+               filename: file.name,
+               numberOfChannels: data.numberOfChannels,
+               sampleRate: data.sampleRate,
+               duration: data.length,
+               data: [left, right],
             })
+            
+            // console.log({
+            //     type: "sample",
+            //     filename: file.name,
+            //     numberOfChannels: data.numberOfChannels,
+            //     sampleRate: data.sampleRate,
+            //     duration: data.length,
+            //     data: [left, right],
+            // })
         }
 
         picker.click();
@@ -723,7 +688,7 @@ current_order = 0;
 curent_row = 0;
 current_instrument = 0; # used for midi playback, will have zero effect during arrangement playback
 
-sendOrder();
+sendOrder(); # use this to send order and pattern information to the engine for playback
 
 is_playing is false;
 }

@@ -8,7 +8,7 @@ void SynthPolyphony::init()
     uni.instances = 1;
 }
 
-void SynthPolyphony::add_voice(int channel_id, int note_id, float vel) 
+void SynthPolyphony::add_voice(int channel_id, int note_id, float vel, int root_note) 
 {
     if(curr == MAX_VOICES) return; // reached limit (in the future add note stealing)
 
@@ -76,7 +76,7 @@ void SamplePolyphony::init()
 
 }
 
-void SamplePolyphony::add_voice(int channel_id, int note_id, float gain)
+void SamplePolyphony::add_voice(int channel_id, int note_id, float gain, int root_note)
 {
     if(curr == MAX_VOICES) return; // reached limit (in the future add note stealing)
 
@@ -84,14 +84,24 @@ void SamplePolyphony::add_voice(int channel_id, int note_id, float gain)
 
     // check if it has already been fired in that channel
     int v = 0;
-    while(v < MAX_VOICES && (voices[v].note_id != note_id || voices[v].channel_id != channel_id || !voices[v].active)) v++;
+    while (v < MAX_VOICES && (voices[v].channel_id != channel_id || !voices[v].active)) v++;
 
-    if (v < MAX_VOICES) {
-        if(voices[v].active && (voices[v].note_id == note_id && voices[v].channel_id == channel_id)) {
+    if (v < MAX_VOICES) 
+    {
+        if(voices[v].active && (voices[v].note_id == note_id && voices[v].channel_id == channel_id)) 
+        {
             flag = true;
             voices[v].gain = 1.0f; // reignite the note
             voices[v].position = 0;
             return;
+        }
+    }
+
+    v = 0;
+    while (v < MAX_VOICES && (voices[v].channel_id != channel_id || voices[v].note_id == note_id || !voices[v].active)) v++;
+    if (v < MAX_VOICES) {
+        if (voices[v].active && (voices[v].note_id != note_id && voices[v].channel_id == channel_id)) {
+            remove_voice(channel_id, voices[v].note_id);
         }
     }
 
@@ -103,6 +113,7 @@ void SamplePolyphony::add_voice(int channel_id, int note_id, float gain)
 
     voices[i].note_id = note_id;
     voices[i].channel_id = channel_id;
+    voices[i].rate = powf(2, static_cast<float>(note_id - root_note)/12);
     voices[i].active = true;
     voices[i].gain = gain;
     voices[i].position = 0;
@@ -117,7 +128,8 @@ void SamplePolyphony::remove_voice(int channel_id, int note_id)
     int v = 0;
     while(v < MAX_VOICES && (voices[v].channel_id != channel_id || voices[v].note_id != note_id || !voices[v].active)) v++;
 
-    if(v < MAX_VOICES) {
+    if(v < MAX_VOICES) 
+    {
         if(voices[v].channel_id == channel_id && voices[v].note_id == note_id && voices[v].active)
         {
             voices[v].active = false;

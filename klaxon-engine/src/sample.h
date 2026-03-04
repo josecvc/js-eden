@@ -9,8 +9,6 @@ public:
 
     void load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
 
-    
-
     // raw PCM
     std::vector<float> left; 
     std::vector<float> right;
@@ -18,6 +16,7 @@ public:
     const char* filename;
     int channels;
     int sample_rate;
+    int root_note{72}; // Assume C-5
     unsigned long length;
 };
 

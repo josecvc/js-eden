@@ -11,6 +11,7 @@ add_executable(dsp
     src/instrument.cpp
     src/engine.cpp
     src/miniaudio.cpp
+    src/pattern.cpp
 )
 
 set_target_properties(dsp PROPERTIES SUFFIX ".wasm")

@@ -17,10 +17,11 @@ struct SampleVoice
 {
     int note_id;
     int channel_id;
+    float rate{1.0f};
     bool active{false};
     float gain{1.0f};
 
-    unsigned long position{0};
+    double position{0};
 };
 
 struct Unison
@@ -36,7 +37,7 @@ public:
     virtual ~Polyphony() = default;
     virtual void init() = 0;
     virtual int get_current_voices() const = 0;
-    virtual void add_voice(int channel_id, int note_id, float volume) = 0;
+    virtual void add_voice(int channel_id, int note_id, float volume, int param) = 0;
     virtual void remove_voice(int channel_id, int note_id) = 0;
 };
 
@@ -48,7 +49,7 @@ public:
 
     void init() override;
     int get_current_voices() const override;
-    void add_voice(int channel_id, int note_id, float gain) override;
+    void add_voice(int channel_id, int note_id, float gain, int root_note) override;
     void remove_voice(int channel_id, int note_id) override;
 
     SampleVoice voices[MAX_VOICES];
@@ -62,7 +63,7 @@ public:
 
     void init() override;
     int get_current_voices() const override;
-    void add_voice(int channel_id, int note_id, float vel) override;
+    void add_voice(int channel_id, int note_id, float vel, int param) override;
     void remove_voice(int channel_id, int note_id) override;
     void set_unison_count(int instances);
 

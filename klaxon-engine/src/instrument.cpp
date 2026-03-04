@@ -18,23 +18,51 @@ void SampleInstrument::render(float** output, int frames)
         
         if(!poly.voices[v].active) continue;
         for (int i = 0; i < frames; i++)
-        {
-            if (sample.channels == 1) {
-                output[0][i] += sample.left[poly.voices[v].position];
-                output[1][i] += sample.left[poly.voices[v].position];
-            } else {
-                output[0][i] += sample.left[poly.voices[v].position];
-                output[1][i] += sample.right[poly.voices[v].position];
+        {   
+            // Add linear interpolaton for different rates
+            
+            // calculate time difference for interpolation
+            int p = static_cast<int>(poly.voices[v].position);
 
-                // output[0][i] += sinf(1.5f * 3.14159f * i/frames);
-                // output[1][i] += sinf(1.5f * 3.14159f * i/frames);
+            // static cast could cause p to be larger than the length
+            if (p >= sample.length - 1) {
+                poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id);
+                break;
             }
 
-            ++poly.voices[v].position;
+            double frac = poly.voices[v].position - p;
+            
+
+            if (sample.channels == 1) {
+                // linear interpolate
+
+                float L0 = sample.left[p];
+                float L1 = sample.left[p + 1];
+
+                float out_lerp = L0 + (L1 - L0) * frac;
+
+                output[0][i] += out_lerp;
+                output[1][i] += out_lerp;
+            } else {
+                float L0 = sample.left[p];
+                float L1 = sample.left[p + 1];
+
+                float R0 = sample.right[p];
+                float R1 = sample.right[p + 1];
+
+                float L_out_lerp = L0 + (L1 - L0) * frac;
+                float R_out_lerp = R0 + (R1 - R0) * frac;
+
+                output[0][i] += L_out_lerp;
+                output[1][i] += R_out_lerp;
+            }
+
+            poly.voices[v].position += poly.voices[v].rate;
 
             if (poly.voices[v].position >= sample.length)
             {
                 poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id);
+                break;
             }
         }
     }
@@ -78,7 +106,7 @@ void SynthInstrument::render(float** output, int frames)
 // simply call the polyphony
 void SampleInstrument::add_voice(int channel_id, int note_id)
 {
-    poly.add_voice(channel_id, note_id, 1.f);
+    poly.add_voice(channel_id, note_id, 1.f, sample.root_note);
 }
 
 void SampleInstrument::remove_voice(int channel_id, int note_id)
@@ -88,7 +116,7 @@ void SampleInstrument::remove_voice(int channel_id, int note_id)
 
 void SynthInstrument::add_voice(int channel_id, int note_id)
 {
-    poly.add_voice(channel_id, note_id, 1.f);
+    poly.add_voice(channel_id, note_id, 1.f, 0);
 }
 
 void SynthInstrument::remove_voice(int channel_id, int note_id)
