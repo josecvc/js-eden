@@ -442,7 +442,7 @@ ${{
             flattened.push(this.patterns[i].flatten())
         }
 
-        data.patterns = flattened.flat(2);
+        data.patterns = flattened.flat();
 
         return data;
     }

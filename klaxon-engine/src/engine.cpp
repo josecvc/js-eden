@@ -127,7 +127,7 @@ void Engine::insert_order(int* patterns, int num_patterns, int* sequence, int nu
         {   
             for (int ch = 0; ch < MAX_CHANNELS; ch++)
             {   int loc = MAX_CHANNELS * MAX_ROWS * p + MAX_CHANNELS * r + ch;
-                
+
                 auto& cell_data = patterns[loc];
                 pat.rows[r][ch].noteId =         cell_data        & 0xFF;
                 pat.rows[r][ch].instrumentId =  (cell_data >> 8)  & 0xFF;
@@ -290,7 +290,11 @@ extern "C"
 
     int read_order(Engine* engine, int* patterns, int num_patterns, int* sequence, int num_indices)
     {
-        
+        if (!engine) return -2;
+
+        engine->insert_order(patterns, num_patterns, sequence, num_indices);
+
+        return 0;
     }
 
     //TODO: Finish WebAssembly functions
