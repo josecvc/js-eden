@@ -125,6 +125,7 @@ class MixerProcessor extends AudioWorkletProcessor {
     playMidi(msg) {
         // int play_from_midi(Engine* engine, int instrument_id, int note_id)
         const res = this.wasm.exports.play_from_midi(this.enginePtr, msg.instrumentId, msg.note);
+        console.log(res);
     }
 
     stopMidi(msg) {

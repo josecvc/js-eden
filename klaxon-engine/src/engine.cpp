@@ -20,9 +20,16 @@ int Engine::process(float** output, int frames)
 
 void Engine::mix_instruments(float** output, int frames)
 {
-    for(int i = 0; i < instruments.size(); i++)
-    {
-        instruments[i]->render(output, frames);
+    // render each voice that is active
+
+    if(poly.get_current_voices() == 0 || instruments.size() == 0) return; // edge case, without this you get null calls
+
+    for(int v = 0; v < poly.MAX_VOICES; v++) {
+        if (poly.voices[v].finished)
+            poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id, poly.voices[v].instrument_id);
+        if(!poly.voices[v].active) continue;
+        
+        instruments[poly.voices[v].instrument_id]->render(output, frames, poly.voices[v]);
     }
 }
 
@@ -196,9 +203,14 @@ extern "C"
     {
         if (!engine) return -2;
         if(instrument_id >= engine->instruments.size()) return -1;
-        engine->instruments[instrument_id]->add_voice(0, note_id);
+        engine->poly.add_voice(0, note_id, instrument_id, 1.0f, 72);
 
         return 0;
+    }
+
+    int read_order(Engine* engine, int* patterns, int num_patterns, int* sequence, int num_indices)
+    {
+        
     }
 
     //TODO: Finish WebAssembly functions

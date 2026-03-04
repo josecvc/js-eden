@@ -1,108 +1,37 @@
 #include "polyphony.h"
 #include "midi.h"
 
-// SYNTH POLYPHONY //
-
-void SynthPolyphony::init() 
+void Polyphony::init()
 {
-    uni.instances = 1;
+
 }
 
-void SynthPolyphony::add_voice(int channel_id, int note_id, float vel, int root_note) 
+void Polyphony::add_voice(int channel_id, int note_id, int instrument_id, float volume, int root_note)
 {
-    if(curr == MAX_VOICES) return; // reached limit (in the future add note stealing)
+    if(curr == MAX_VOICES) return; // reached limit (in the future add note stealing if necessary)
 
-    bool flag = false;
-    for(int v = 0; v < MAX_VOICES; v++) // check if note is already there
+    int old = -1;
+
+    for (int v = 0; v < MAX_VOICES; v++) 
     {
-        if(voices[v].note_id == note_id && voices[v].channel_id == channel_id) {
-            flag = true;
-            voices[v].velocity = 1.0f; // reignite the note
-        }
-        
-    }
-
-    if(flag) return;
-
-    // find the first inactive voice
-    int v = 0;
-    while(voices[v].active) v++;
-
-    // find the next set of inactive voices 
-    // would be better if only one voice had a set of frequencies to iterate through
-    // would require a vector of frequencies according to the number of unison instances
-    for(int i = 0; i < uni.instances && i + v < MAX_VOICES; i++)
-    {
-        voices[i + v].active = true;
-        voices[i + v].releasing = false;
-        voices[i + v].note_id = note_id;
-        voices[i + v].frequency = calculate_frequency(note_id) + 2*i;
-        voices[i + v].velocity = vel;
-        voices[i + v].phase = i * 10;
-        curr++;
-    }
-}
-
-int SynthPolyphony::get_current_voices() const
-{
-    return curr;
-}
-
-void SynthPolyphony::remove_voice(int channel_id, int note_id)
-{
-    if(curr <= 0) return; // no active voices
-
-    for(int v = 0; v < MAX_VOICES; v++)
-    {
-        if(voices[v].channel_id == channel_id && voices[v].note_id == note_id && voices[v].active)
-        { // note is still releasing
-            voices[v].releasing = true;
-            voices[v].active = false;
-            voices[v].note_id = -1;
-            curr--;
-        }
-    }
-}
-
-void SynthPolyphony::set_unison_count(int instances)
-{
-    uni.instances = instances;
-}
-
-// SAMPLE POLYPHONY //
-
-void SamplePolyphony::init()
-{
-
-}
-
-void SamplePolyphony::add_voice(int channel_id, int note_id, float gain, int root_note)
-{
-    if(curr == MAX_VOICES) return; // reached limit (in the future add note stealing)
-
-    bool flag = false;
-
-    // check if it has already been fired in that channel
-    int v = 0;
-    while (v < MAX_VOICES && (voices[v].channel_id != channel_id || !voices[v].active)) v++;
-
-    if (v < MAX_VOICES) 
-    {
-        if(voices[v].active && (voices[v].note_id == note_id && voices[v].channel_id == channel_id)) 
+        if(voices[v].channel_id == channel_id)
         {
-            flag = true;
-            voices[v].gain = 1.0f; // reignite the note
-            voices[v].position = 0;
-            return;
+            old = v;
+            break;
         }
     }
 
-    v = 0;
-    while (v < MAX_VOICES && (voices[v].channel_id != channel_id || voices[v].note_id == note_id || !voices[v].active)) v++;
-    if (v < MAX_VOICES) {
-        if (voices[v].active && (voices[v].note_id != note_id && voices[v].channel_id == channel_id)) {
-            remove_voice(channel_id, voices[v].note_id);
-        }
+    if (old != -1 && voices[old].note_id == note_id && voices[old].channel_id == channel_id && voices[old].instrument_id == instrument_id)
+    {
+        voices[old].volume = 1.0f;
+        voices[old].position = 0;
+        voices[old].finished = false;
+        return;
+    }
+
+    if (old != -1)
+    {
+        voices[old].finished = true;
     }
 
     // find the first inactive voice
@@ -113,15 +42,17 @@ void SamplePolyphony::add_voice(int channel_id, int note_id, float gain, int roo
 
     voices[i].note_id = note_id;
     voices[i].channel_id = channel_id;
+    voices[i].instrument_id = instrument_id;
     voices[i].rate = powf(2, static_cast<float>(note_id - root_note)/12);
     voices[i].active = true;
-    voices[i].gain = gain;
+    voices[i].finished = false;
+    voices[i].volume = volume;
     voices[i].position = 0;
 
     curr++;
 }
 
-void SamplePolyphony::remove_voice(int channel_id, int note_id)
+void Polyphony::remove_voice(int channel_id, int note_id, int instrument_id)
 {
     if(curr <= 0) return; // no active voices
 
@@ -131,18 +62,22 @@ void SamplePolyphony::remove_voice(int channel_id, int note_id)
     if(v < MAX_VOICES) 
     {
         if(voices[v].channel_id == channel_id && voices[v].note_id == note_id && voices[v].active)
-        {
+        {   
+            // just reset everything
             voices[v].active = false;
+            voices[v].releasing = true;
             voices[v].note_id = -1;
             voices[v].channel_id = -1;
-            voices[v].gain = 0.f;
+            voices[v].instrument_id = 0;
+            voices[v].volume = 0;
             voices[v].position = 0;
+            voices[v].finished = false;
             curr--;
         }
     }
 }
 
-int SamplePolyphony::get_current_voices() const
+int Polyphony::get_current_voices() const
 {
     return curr;
 }

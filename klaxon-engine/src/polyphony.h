@@ -2,26 +2,20 @@
 #define POLYPHONY_H
 
 // TODO: Add Sampler polyphony and Synth polyphony
-struct SynthVoice 
+
+struct Voice
 {
     int note_id;
     int channel_id;
+    int instrument_id;
     float frequency{440.f};
     float phase{.0f};
-    bool active{false};
-    bool releasing{false};
-    float velocity{1.0f};
-};
-
-struct SampleVoice 
-{
-    int note_id;
-    int channel_id;
     float rate{1.0f};
     bool active{false};
-    float gain{1.0f};
-
-    double position{0};
+    bool releasing{false};
+    bool finished{false};
+    float volume{0};
+    double position{0.0f};
 };
 
 struct Unison
@@ -32,43 +26,15 @@ struct Unison
 class Polyphony 
 {
 public:
-    static constexpr int MAX_VOICES = 16;
+    static constexpr int MAX_VOICES = 32; // must be the at least the number of channels
 
-    virtual ~Polyphony() = default;
-    virtual void init() = 0;
-    virtual int get_current_voices() const = 0;
-    virtual void add_voice(int channel_id, int note_id, float volume, int param) = 0;
-    virtual void remove_voice(int channel_id, int note_id) = 0;
-};
+    Polyphony() {}
+    void init();
+    int get_current_voices() const;
+    void add_voice(int channel_id, int note_id, int instrument_id, float volume, int param);
+    void remove_voice(int channel_id, int note_id, int instrument_id);
 
-
-class SamplePolyphony : public Polyphony
-{
-public:
-    SamplePolyphony() {}
-
-    void init() override;
-    int get_current_voices() const override;
-    void add_voice(int channel_id, int note_id, float gain, int root_note) override;
-    void remove_voice(int channel_id, int note_id) override;
-
-    SampleVoice voices[MAX_VOICES];
-    int curr{0};
-};
-
-class SynthPolyphony : public Polyphony
-{
-public:
-    SynthPolyphony() {}
-
-    void init() override;
-    int get_current_voices() const override;
-    void add_voice(int channel_id, int note_id, float vel, int param) override;
-    void remove_voice(int channel_id, int note_id) override;
-    void set_unison_count(int instances);
-
-    Unison uni;
-    SynthVoice voices[MAX_VOICES];
+    Voice voices[MAX_VOICES];
     int curr{0};
 };
 
