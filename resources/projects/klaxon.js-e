@@ -65,7 +65,7 @@ ${{
     const keysDown = new Set();
     const transpose = 12;
     const multiplier = 1;
-    const keyToNote = { // just to sample
+    const keyToNote = { // MIDI
     "KeyQ" :   60 + transpose*multiplier, // C 4
     "Digit2" : 61 + transpose*multiplier, // C# 4/Db 4
     "KeyW" :   62 + transpose*multiplier, // D 4

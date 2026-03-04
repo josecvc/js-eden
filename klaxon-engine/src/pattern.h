@@ -15,7 +15,7 @@ struct Cell {
 
 struct Pattern
 {
-    Cell rows[MAX_ROWS * MAX_CHANNELS];
+    Cell rows[MAX_ROWS][MAX_CHANNELS];
 };
 
 struct Order {

@@ -23,13 +23,15 @@ public:
     void mix_instruments(float** output, int frames);
     void clear(float** output, int frames);
     int step(int frames);
+    void process_row();
+    void advance_row();
 
     // playback mutation
     void insert_order();
     void play(int total_rows);
     void pause();
     void stop();
-
+    
     // timing
     void set_bpm(int bpm);
     void set_sample_rate(int sample_rate);
@@ -40,14 +42,21 @@ public:
     void add_synth();
     void remove_instrument(int instrument_id);
 
+    // timing attributes
     double current_samples;
     int bpm;
     int sample_rate;
     double samples_per_row;
     int rows_per_beat;
-    int instrument_count;
-    bool is_playing;
 
+    // playback state
+    bool is_playing{false};
+    unsigned short current_row;
+    unsigned short current_order;
+    unsigned short current_pattern;
+
+    int instrument_count; // use this if you intend on switching to Instrument[MAX_INSTRUMENTS]
+    
     Order order;
     std::vector<std::unique_ptr<Instrument>> instruments;
     Polyphony poly;

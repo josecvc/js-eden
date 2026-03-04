@@ -11,8 +11,17 @@ void Engine::init(int sample_rate, int bpm, int rows_per_beat)
 
 int Engine::process(float** output, int frames)
 {
-    int is_hit = step(frames);
     clear(output, frames);
+
+    int is_hit = -1; // assume no playback
+    
+    if(is_playing) {
+        is_hit = step(frames);
+
+        if(is_hit) // only process if the step encounters a hit
+            process_row();
+    }
+    
     mix_instruments(output, frames);
 
     return is_hit;
@@ -44,7 +53,7 @@ void Engine::clear(float** output, int frames)
 
 int Engine::step(int frames)
 {
-    int is_hit = 0;
+    int is_hit = 0; // signal for front-end (this could easily be written to a shared buffer)
 
     // calculate time
     int start_sample = current_samples;
@@ -55,12 +64,46 @@ int Engine::step(int frames)
 
     if (end_row > start_row)
     {
-        is_hit = 1; // we have hit a row, time to start signalling!
+        is_hit = 1;
+        advance_row();
     }
 
     current_samples = end_sample;
-
+    
     return is_hit;
+}
+
+void Engine::process_row()
+{
+    // find which row to process based on current_row, current_pattern
+
+    auto& ptrn = order.patterns[current_pattern];
+
+    for (int ch = 0; ch < MAX_CHANNELS; ch++)
+    {
+        auto& cell = ptrn.rows[current_row][ch];
+        if(cell.instrumentId >= instruments.size() || cell.noteId < 12 || cell.noteId > 119) continue;
+
+        // channels are 1-indexed (MIDI is taking channel 0)
+        poly.add_voice(ch % MAX_CHANNELS + 1, cell.noteId, cell.instrumentId, cell.volume, 72); // "72" needs to be changed afterwards
+    }
+}
+
+void Engine::advance_row()
+{
+    if (++current_row > MAX_ROWS - 1) { // 0 -> (MAX_ROWS - 1)
+        current_row = 0;
+
+        if(++current_order >= order.sequence_length) {
+            is_playing = false;
+            current_order = 0;
+            current_samples = 0;
+            current_pattern = order.sequence[0];
+            return;
+        }
+        
+        current_pattern = order.sequence[current_order];
+    }
 }
 
 void Engine::play(int row_no)
@@ -120,6 +163,9 @@ void Engine::remove_instrument(int instrument_id)
         instruments.erase(instruments.begin() + instrument_id);
 }
 
+/**
+ * Exported WebAssembly Functions (put everything in a main file when finished)
+ */
 extern "C"
 {
     Engine* create_engine()
