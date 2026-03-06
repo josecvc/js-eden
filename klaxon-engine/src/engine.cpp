@@ -1,12 +1,16 @@
 #include "engine.h"
 
-void Engine::init(int sample_rate, int bpm, int rows_per_beat)
+void Engine::init(int sample_rate, int bpm, int ticks_per_row)
 {
     this->sample_rate = sample_rate;
     this->bpm = bpm;
-    this->rows_per_beat = rows_per_beat;
+    this->ticks_per_row = ticks_per_row;
+    this->ticks_per_row = ticks_per_row;
+        
+    this->samples_per_tick = static_cast<float>(sample_rate) * 60.f  / (bpm * 24); // 24 ticks per minute tempo base
 
-    this->samples_per_row = static_cast<float>(sample_rate) * 60.f / bpm / rows_per_beat;
+    this->current_samples = 0;
+    this->current_ticks = 0;
     this->current_row = 0;
     this->current_pattern = 0;
     this->current_order = 0;
@@ -21,7 +25,7 @@ int Engine::process(float** output, int frames)
     if(is_playing) {
         is_hit = step(frames);
 
-        if(is_hit) { // only process if the step encounters a hit
+        if(is_hit && current_ticks % ticks_per_row == 0) { // only process if the step encounters a hit and we have hit ticks_per_row ticks
             process_row();
         }
     }
@@ -57,23 +61,24 @@ void Engine::clear(float** output, int frames)
 
 int Engine::step(int frames)
 {
-    int is_hit = 0; // signal for front-end (this could easily be written to a shared buffer)
+    int is_hit = 0;
 
-    // calculate time
     int start_sample = current_samples;
     int end_sample = current_samples + frames;
 
-    int start_row = start_sample / samples_per_row;
-    int end_row = (end_sample - 1) / samples_per_row;
+    int start_tick = start_sample / samples_per_tick;
+    int end_tick = (end_sample - 1) / samples_per_tick;
 
-    if (end_row > start_row)
+    if (end_tick / ticks_per_row > start_tick / ticks_per_row)
     {
         is_hit = 1;
         advance_row();
+        
     }
 
     current_samples = end_sample;
-    
+    current_ticks = end_tick;
+
     return is_hit;
 }
 
@@ -151,7 +156,7 @@ void Engine::insert_order(int* sequence, int num_indices, int* patterns, int num
 
 void Engine::play(int order_num, int row_num)
 {   
-    int apparent_samples = samples_per_row * row_num + MAX_ROWS * samples_per_row * order_num;
+    int apparent_samples = samples_per_tick * ticks_per_row * row_num + MAX_ROWS * samples_per_tick * ticks_per_row * order_num;
     if (apparent_samples != current_samples) 
         current_samples = apparent_samples;
 
@@ -178,19 +183,19 @@ void Engine::stop()
 void Engine::set_bpm(int bpm)
 {
     this->bpm = bpm;
-    this->samples_per_row = static_cast<float>(sample_rate) * 60.0 / bpm / rows_per_beat;
+    this->samples_per_tick = static_cast<float>(sample_rate) * 60.0  / 24 / bpm;
 }
 
 void Engine::set_sample_rate(int sample_rate)
 {
     this->sample_rate = sample_rate;
-    this->samples_per_row = static_cast<float>(sample_rate) * 60 / bpm / rows_per_beat;
+    this->samples_per_tick = static_cast<float>(sample_rate) * 60 / 24 / bpm ;
 }
 
-void Engine::set_rows_per_beat(int rows_per_beat)
+void Engine::set_ticks_per_row(int ticks_per_row)
 {
-    this->rows_per_beat = rows_per_beat;
-    this->samples_per_row = static_cast<float>(sample_rate) * 60.0 / bpm / rows_per_beat;
+    this->ticks_per_row = ticks_per_row;
+    this->samples_per_tick = static_cast<float>(sample_rate) * 60.0  / 24 / bpm;
 }
 
 void Engine::add_synth()
@@ -223,10 +228,10 @@ extern "C"
         return new Engine();
     }
 
-    void init_engine(Engine* engine, int sample_rate, int bpm, int rows_per_beat)
+    void init_engine(Engine* engine, int sample_rate, int bpm, int ticks_per_row)
     {
         if(!engine) return;
-        engine->init(sample_rate, bpm, rows_per_beat);
+        engine->init(sample_rate, bpm, ticks_per_row);
     }
 
     bool destroy_engine(Engine* engine)
@@ -272,10 +277,10 @@ extern "C"
         engine->set_sample_rate(sample_rate);
     }
 
-    void set_rows_per_beat(Engine* engine, int rows_per_beat)
+    void set_ticks_per_row(Engine* engine, int ticks_per_row)
     {
         if (!engine) return;
-        engine->set_rows_per_beat(rows_per_beat);
+        engine->set_ticks_per_row(ticks_per_row);
     }
 
     int add_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
@@ -297,6 +302,15 @@ extern "C"
         if (!engine) return -2;
         if(instrument_id > engine->instruments.size() || instrument_id < 1) return -1;
         engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
+
+        return 0;
+    }
+
+    int stop_from_midi(Engine* engine, int instrument_id, int note_id)
+    {
+        if (!engine) return -2;
+        if(instrument_id > engine->instruments.size() || instrument_id < 1) return -1;
+        // engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
 
         return 0;
     }

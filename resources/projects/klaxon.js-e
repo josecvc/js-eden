@@ -42,7 +42,7 @@ ${{
                     wasm: buffer,
                     sampleRate: root.lookup("ctx").value().sampleRate,
                     bpm: 140,
-                    rowsPerBeat: 4
+                    ticksPerRow: 6
                     })
                 }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
             } else {
@@ -682,7 +682,7 @@ action config {
 ## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
 bpm = 140;
-rows_per_beat = 4;
+ticks_per_row = 6;
 current_order = 0;
 curent_row = 0;
 current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
@@ -702,11 +702,11 @@ action timing {
         }}$
     }
 
-    when(rows_per_beat) {
+    when(ticks_per_row) {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "rows-per-beat",
-                value: root.lookup("rows_per_beat").value()
+                value: root.lookup("ticks_per_row").value()
             })
         }}$
     }
@@ -745,7 +745,7 @@ action ACTIVE {
     jseden_project_title = "Klaxon";
 
     bpm = 140;
-    rows_per_beat = 4;
+    ticks_per_row = 6;
     current_order = 0;
     current_row = 0;
     rows_per_pattern = 64;

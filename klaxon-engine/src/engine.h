@@ -14,9 +14,9 @@ public:
     static constexpr int MAX_INSTRUMENTS = 32;
 
     Engine() {}
-    Engine(int sample_rate, int bpm, int rows_per_beat) : sample_rate(sample_rate), bpm(bpm), rows_per_beat(rows_per_beat) {}
+    Engine(int sample_rate, int bpm, int ticks_per_row) : sample_rate(sample_rate), bpm(bpm), ticks_per_row(ticks_per_row) {}
 
-    void init(int sample_rate, int bpm, int rows_per_beat);
+    void init(int sample_rate, int bpm, int ticks_per_row);
 
     // playback
     int process(float** output, int frames);
@@ -35,7 +35,7 @@ public:
     // timing
     void set_bpm(int bpm);
     void set_sample_rate(int sample_rate);
-    void set_rows_per_beat(int rows_per_beat);
+    void set_ticks_per_row(int ticks_per_row);
     
     // instruments
     void add_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
@@ -44,10 +44,11 @@ public:
 
     // timing attributes
     double current_samples;
+    int current_ticks;
     int bpm;
     int sample_rate;
-    double samples_per_row;
-    int rows_per_beat;
+    double samples_per_tick;
+    int ticks_per_row;
 
     // playback state
     bool is_playing{false};
