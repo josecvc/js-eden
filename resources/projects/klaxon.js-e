@@ -660,6 +660,12 @@ proc sendOrder {
 
 ## ACTIONS
 
+
+action makeui {
+createCanvas("PatternEditor");
+
+}
+
 action instruments {
 ## Define instruments here
 # Use Sample() and Synth(), then add to instruments

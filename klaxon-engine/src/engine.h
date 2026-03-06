@@ -43,8 +43,6 @@ public:
     void remove_instrument(int instrument_id);
 
     // timing attributes
-    double current_samples;
-    int current_ticks;
     int bpm;
     int sample_rate;
     double samples_per_tick;
@@ -52,15 +50,18 @@ public:
 
     // playback state
     bool is_playing{false};
+    double current_samples;
+    int current_ticks;
     short current_row;
     short current_order;
     short current_pattern;
 
-    int instrument_count; // use this if you intend on switching to Instrument[MAX_INSTRUMENTS]
+    int instrument_count; // use this to switch to Instrument[MAX_INSTRUMENTS]
     
     Order order;
     std::vector<std::unique_ptr<Instrument>> instruments;
     Polyphony poly;
+    // Channel channels; maybe?? 
     
 };
 
