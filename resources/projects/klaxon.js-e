@@ -129,7 +129,7 @@ ${{
 
 
 ${{
-Trigger = function(obsName, noteId, instrumentId, volume, effect) {
+Cell = function(obsName, noteId, instrumentId, volume, effect) {
     this.obsName = obsName
     this.noteId = noteId ?? null;
     this.instrumentId = instrumentId ?? null;
@@ -189,7 +189,7 @@ func Pattern {
     }}$;
 }
 
-func Trigger {
+func Cell {
     para obsName, noteId, instrumentId, volume, effect
     ${{
         let o = obsName ?? null;
@@ -198,7 +198,7 @@ func Trigger {
         let v = volume ?? null;
         let e = effect ?? null;
 
-        return new Trigger(o, n, i, v, e);
+        return new Cell(o, n, i, v, e);
     }}$
 }
 
@@ -305,8 +305,8 @@ ${{
         return rowNo < 0 || rowNo > this.numRows || columnNo < 0 || columnNo > this.numColumns;
     }
 
-    Pattern.prototype.changeCell = function(rowNo, channelNo, trigger) {
-        this.rows[rowNo][channelNo] = trigger;
+    Pattern.prototype.changeCell = function(rowNo, channelNo, cell) {
+        this.rows[rowNo][channelNo] = cell;
     }
 
     Pattern.prototype.noteToMidi = function(note) {
@@ -344,7 +344,7 @@ ${{
         for(let r = 0; r < this.numRows; r++) {
             this.rows[r] = []
             for (let c = 0; c < this.numChannels; c++) {
-                this.rows[r][c] = new Trigger(null, null, null, null, null);
+                this.rows[r][c] = new Cell(null, null, null, null, null);
             }
         }  
     }
@@ -499,7 +499,7 @@ proc createPattern {
 }
 
 proc changeCell {
-    para pattern, trigger, rowNo, columnNo
+    para pattern, cell, rowNo, columnNo
     ${{
         const p = arguments[0];
         const t = arguments[1];
@@ -645,16 +645,29 @@ proc sendOrder {
             patterns: data.patterns,
             numPatterns: data.numPatterns
         })
+    }}$
+}
 
-        // console.log(
-        //     {
-        //         type: "pattern-order",
-        //         sequence: data.sequence,
-        //         numIndices: data.sequence.length,
-        //         patterns: data.patterns,
-        //         numPatterns: data.numPatterns
-        //     }
-        // )
+## MIDI2NOTE
+
+func midi2note {
+    para midi;
+    ${{
+        const midiToKey = {
+            0: "C-", 1: "C#",
+            2: "D-", 3: "D#",
+            4: "E-", 
+            5: "F-", 6: "F#",
+            7: "G-", 8: "G#",
+            9: "A-", 10: "A#",
+            11: "B-"
+        }
+
+        const octave = Math.floor(midi / 12) - 1;
+
+        const semitone = midiToKey[midi % 12];
+
+        return semitone + octave.toString();
     }}$
 }
 
@@ -662,10 +675,77 @@ proc sendOrder {
 
 
 action makeui {
-createCanvas("PatternEditor");
+# Set up canvas
+createCanvas("PatternEditor", "editorCanvas", "Pattern Editor");
 
+mouseWheelEnabled = true;
+view_PatternEditor_width = 1193;
+view_PatternEditor_height = 843;
+view_PatternEditor_x = 295.5;
+view_PatternEditor_y = 8.5;
+
+currentPattern = 1;
+
+patternFocus is patterns[currentPattern];
+scale = 1;
+cellWidth is view_PatternEditor_width/6 * scale;
+cellHeight is view_PatternEditor_height/24 * scale;
+
+gridOffset is [40, 3* view_PatternEditor_height / 4 - currentRow*cellHeight]
+
+# Timing
+tempoText is Text(bpm, 0, 50, 50, "white", "#CBE5D4");
+
+playText is Text("Play", 0, 0, 50, "white", "#CBE5D4");
+playRect is Rectangle(0, 0, 100, 55, "gray");
+
+topCover is Rectangle(0, 0, view_PatternEditor_width * scale, view_PatternEditor_height/2 * scale, "blue");
+bottomCover is Rectangle(0, view_PatternEditor_height/2, view_PatternEditor_width, view_PatternEditor_height/2, "#00000000", "#000000");
+channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/2 , cellWidth, view_PatternEditor_height/2, "#00000000", "#000000") with ch is 0..3;
+
+playButton is [playRect, playText];
+
+# Current Pattern
+patternIDTxt is Text("Pattern: " + currentPattern, 0, view_PatternEditor_height/2 - 30 * 1.75, 30, "black", "#000000");
+
+
+# Grid Rendering
+channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/2 + 5, 30, "black", "bold") with ch is 0..3;
+rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..63
+gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y+1 == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
+noteClassifier is midi2note(patternFocus[r+1][ch+1][1]) if (patternFocus[r+1][ch+1][1] >= 12 && patternFocus[r+1][ch+1][1] <= 119) else "---";
+noteText   is Text(noteClassifier            , ch*cellWidth + gridOffset[1]                  , r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
+instrText  is Text(patternFocus[r+1][ch+1][2], ch*cellWidth + gridOffset[1] + cellWidth/5 * 2, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
+volText    is Text(patternFocus[r+1][ch+1][3], ch*cellWidth + gridOffset[1] + cellWidth/5 * 3, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
+effectText is Text(patternFocus[r+1][ch+1][4], ch*cellWidth + gridOffset[1] + cellWidth/5 * 4, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
+
+gridBase is gridCell with x is 0..3, y is 0..63;
+
+grid is [gridBase, rowNos, noteText, instrText, volText, effectText, channelIDTxt, channelRect];
+
+# In render order
+editorCanvas is [bottomCover, grid, topCover, playButton, patternIDTxt, tempoText];
 }
 
+action initUIevents {
+    mouseHoverRow is floor((mouseY - gridOffset[2])/cellHeight);
+    mouseHoverChannel is floor((mouseX - gridOffset[1])/cellWidth);
+
+    mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 6)) % 6;
+
+    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3);
+
+    when(mousePressed) {
+        if(mouseButton == "Left down" & mouseOverCell) {
+            ${{
+                const mr = root.lookup("mouseHoverRow").value();
+                const mc = root.lookup("mouseHoverChannel").value();
+                const me = root.lookup("mouseHoverElement").value();
+                console.log(`Cell ${mr}:${mc}:${me}`)
+            }}$
+        } 
+    }
+}
 action instruments {
 ## Define instruments here
 # Use Sample() and Synth(), then add to instruments
@@ -675,10 +755,10 @@ action instruments {
 
 action scratchpad {
 ## Make your patterns here
-# Pattern(name), Trigger(name, noteId, instrumentId, volume, effect) (make sure the name is matched to the observable name)
+# Pattern(name), Cell(name, noteId, instrumentId, volume, effect) (make sure the name is matched to the observable name)
 
 createPattern("patternOne");
-tri = Trigger("tri", "C-5", 1, 64, 0);
+tri = Cell("tri", "C-5", 1, 64, 0);
 changeCell(pattern_patternOne, tri, 0, 0);
 addPatternToOrder(pattern_patternOne);
 addPatternToSequence(0, 0);
@@ -688,9 +768,9 @@ action config {
 ## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
 bpm = 140;
-ticks_per_row = 6;
-current_order = 0;
-curent_row = 0;
+ticksPerRow = 6;
+currentOrder = 0;
+currentRow = 0;
 current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
 
 sendOrder(); # use this to send order and pattern information to the engine for playback
@@ -736,6 +816,15 @@ ${{
 }}$
 }
 
+action initpatterns {
+    # max 255 patterns to use
+    # cell is noteId, instrumentId, vol, effect
+    channels is [72, "--", "--", "---"] with c is 1..4;
+    rows is channels with r is 0..63
+    patterns is rows with p is 1..MAX_PATTERNS;
+    patternsInUse is [0]; # holds pattern indices
+}
+
 # NATIVE EVENT LISTENERS
 
 do lib:unexecuted;
@@ -750,11 +839,15 @@ action ACTIVE {
     view_myscript_current = 0;
     jseden_project_title = "Klaxon";
 
+    MAX_PATTERNS = 255;
+    MAX_CHANNELS = 127;
+    MAX_ROWS = 256;
+
     bpm = 140;
-    ticks_per_row = 6;
-    current_order = 0;
-    current_row = 0;
-    rows_per_pattern = 64;
+    ticksPerRow = 6;
+    currentOrder = 0;
+    currentRow = 0;
+    rowsPerPattern = 64;
     channels = 8;
     current_instrument = 1;
 
@@ -764,4 +857,7 @@ action ACTIVE {
 
     do :project > setuplisteners;
     do :project > timing;
+    do :project > initpatterns;
+    do :project > makeui;
+    do :project > initUIevents;
 }
