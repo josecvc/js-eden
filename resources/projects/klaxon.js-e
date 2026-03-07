@@ -735,15 +735,50 @@ action initUIevents {
 
     mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3);
 
-    when(mousePressed) {
-        if(mouseButton == "Left down" & mouseOverCell) {
-            ${{
-                const mr = root.lookup("mouseHoverRow").value();
-                const mc = root.lookup("mouseHoverChannel").value();
-                const me = root.lookup("mouseHoverElement").value();
-                console.log(`Cell ${mr}:${mc}:${me}`)
-            }}$
-        } 
+    cellScroll = false;
+
+
+    when(mouseDown) {
+        if(mouseButton == "Left down" && mouseOverCell) {
+            rowFocus  = mouseHoverRow;
+            channelFocus = mouseHoverChannel;
+            elementFocus = mouseHoverElement;
+            cellScroll = true;
+            
+        }
+    }
+
+    when(mouseWheel) {
+        if(!mousePressed || !mouseOverCell) {
+            ${{console.log("Scrolling...")}}$
+            if(mouseWheelVelocity > 0) {
+                currentRow++;
+            } else if (mouseWheelVelocity < 0) {
+                currentRow--;
+            }
+        } else if (mouseOverCell) {
+            if(elementFocus == 0) {
+                ${{console.log("Scrolling on cell")}}$
+                temp = patterns[currentPattern][rowFocus + 1][channelFocus + 1][elementFocus + 1];
+                if(mouseWheelVelocity < 0) {
+                if(temp < 119) {  
+                    patterns[currentPattern][rowFocus + 1][channelFocus + 1][elementFocus + 1] = patterns[currentPattern][rowFocus + 1][channelFocus + 1][elementFocus + 1] + 1;
+                }
+                } else if (mouseWheelVelocity > 0) {
+                    if(temp > 0) {
+                        patterns[currentPattern][rowFocus + 1][channelFocus + 1][elementFocus + 1] = patterns[currentPattern][rowFocus + 1][channelFocus + 1][elementFocus + 1] - 1;
+                    }
+                }
+            }
+        }
+    }
+
+    when(currentPattern) {
+        patternFocus is patterns[currentPattern];
+    }
+
+    when(patterns[currentPattern]) {
+        patternFocus is patterns[currentPattern]
     }
 }
 action instruments {
@@ -819,10 +854,9 @@ ${{
 action initpatterns {
     # max 255 patterns to use
     # cell is noteId, instrumentId, vol, effect
-    channels is [72, "--", "--", "---"] with c is 1..4;
-    rows is channels with r is 0..63
-    patterns is rows with p is 1..MAX_PATTERNS;
-    patternsInUse is [0]; # holds pattern indices
+    channels = [72, 0, 0, 0, 0] with c is 1..4;
+    rows = channels with r is 0..63
+    patterns = rows with p is 1..MAX_PATTERNS;
 }
 
 # NATIVE EVENT LISTENERS
@@ -839,7 +873,7 @@ action ACTIVE {
     view_myscript_current = 0;
     jseden_project_title = "Klaxon";
 
-    MAX_PATTERNS = 255;
+    MAX_PATTERNS = 16;
     MAX_CHANNELS = 127;
     MAX_ROWS = 256;
 
@@ -852,7 +886,6 @@ action ACTIVE {
     current_instrument = 1;
 
     is_playing is false;
-    pattern_order = Order("pattern_order"); # holds sequencing data
     instrument_list = InstrumentList("instrument_list");
 
     do :project > setuplisteners;
