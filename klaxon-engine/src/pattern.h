@@ -15,7 +15,11 @@ struct Cell {
 
 struct Pattern
 {
-    Cell rows[MAX_ROWS][MAX_CHANNELS];
+    int num_rows;
+    int num_channels;
+    
+    Cell rows[MAX_ROWS][MAX_CHANNELS]; // this needs to change, [MAX_ROWS] can be variable, [MAX_CHANNELS] can be variable
+    // Cell** rows; // change to this in the end
 };
 
 struct Order {

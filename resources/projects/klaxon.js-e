@@ -127,36 +127,6 @@ ${{
     })
 }}$;
 
-
-${{
-Cell = function(obsName, noteId, instrumentId, volume, effect) {
-    this.obsName = obsName
-    this.noteId = noteId ?? null;
-    this.instrumentId = instrumentId ?? null;
-    this.volume = volume ?? null;
-    this.effect = effect ?? null;
-}
-}}$
-
-${{
-Pattern = function(obsName) {
-    this.obsName = obsName
-    this.numRows = 64;
-    this.numChannels = 8;
-    this.rows = [];
-    this.clear();
-}
-}}$;
-
-${{
-Order = function(obsName) {
-    this.obsName = obsName;
-    this.numPatterns = 0;
-    this.sequence = [];
-    this.patterns = [];
-}
-}}$;
-
 ${{
 Sample = function(obsName) {
     this.obsName = obsName;
@@ -180,37 +150,6 @@ InstrumentList = function(obsName) {
 }}$;
 
 # DEFINITIONS
-
-func Pattern {
-    para obsName;
-    ${{
-        let o = obsName ?? null;
-        return new Pattern(o);
-    }}$;
-}
-
-func Cell {
-    para obsName, noteId, instrumentId, volume, effect
-    ${{
-        let o = obsName ?? null;
-        let n = noteId ?? null;
-        let i = instrumentId ?? null;
-        let v = volume ?? null;
-        let e = effect ?? null;
-
-        return new Cell(o, n, i, v, e);
-    }}$
-}
-
-func Order {
-    para obsName
-    ${{
-        let o = obsName ?? null;
-
-        return new Order(o);
-    }}$
-}
-
 func Synth {
     para obsName
     
@@ -276,7 +215,9 @@ func Sample {
 
     createView("hidden", "HTMLContent");
     view_hidden_title = "Hidden input";
+    view_hidden_visibility = "hidden";
     view_hidden_content = "<input type='file' id='audio-file-input' accept='audio/*' title='Upload Sample'>"
+
     addSample();
 
     ${{
@@ -289,175 +230,93 @@ ${{
     
 }}$
 
-# PATTERN JS FUNCTIONS
-${{
-    const keyToMidi = {
-        "C-": 0,  "C#": 1,
-        "Db": 1,  "D-": 2, "D#": 3,
-        "Eb": 3,  "E-": 4,
-        "F-": 5,  "F#": 6,
-        "Gb": 6,  "G-": 7, "G#": 8,
-        "Ab": 8,  "A-": 9, "A#": 10,
-        "Bb": 10, "B-": 11
-    }
-
-    Pattern.prototype.outOfBounds = function(rowNo, columnNo) {
-        return rowNo < 0 || rowNo > this.numRows || columnNo < 0 || columnNo > this.numColumns;
-    }
-
-    Pattern.prototype.changeCell = function(rowNo, channelNo, cell) {
-        this.rows[rowNo][channelNo] = cell;
-    }
-
-    Pattern.prototype.noteToMidi = function(note) {
-        //C-5
-
-        if(note == null) {
-            return 0
-        }
-
-        const semitone = keyToMidi[note.substring(0, 2)]; // C-
-
-        const octave = parseInt(note.at(2));
-
-        return semitone + (octave + 1) * 12;
-    }
-
-    Pattern.prototype.flatten = function() { 
-        const flattened = []
-        for (let r = 0; r < this.numRows; r++) {
-            for (let c = 0; c < this.numChannels; c++) {
-                // Convert everything here to one single 32-bit integer
-                flattened.push(
-                    ((parseInt(this.noteToMidi(this.rows[r][c].noteId)) || 0) & 0xFF) |
-                    (((parseInt(this.rows[r][c].instrumentId) || 0) & 0xFF) << 8) |
-                    (((parseInt(this.rows[r][c].volume) || 0) & 0xFF) << 16) |
-                    (((parseInt(this.rows[r][c].effect) || 0) & 0xFF) << 24)
-                );
-            }
-        }
-
-        return flattened;
-    }
-
-    Pattern.prototype.clear = function() {
-        for(let r = 0; r < this.numRows; r++) {
-            this.rows[r] = []
-            for (let c = 0; c < this.numChannels; c++) {
-                this.rows[r][c] = new Cell(null, null, null, null, null);
-            }
-        }  
-    }
-
-    Pattern.prototype.getCell = function(rowNo, columnNo) {
-        // doesn't exist
-
-        return this.rows[rowNo][columnNo];
-    }
-
-    Pattern.prototype.changeVolume = function(vol, rowNo, columnNo) {
-        if(!p.outOfBounds)
-            p.rows[rowNo][columnNo].volume = vol;
-    }
-
-    Pattern.prototype.toString = function() {
-        return this.getEdenCode();
-    };
-
-    Pattern.prototype.getEdenCode = function () {
-        var s = "Pattern(" + Eden.edenCodeForValues(
-            this.obsName, this.numRows)+")";
-        return s;
-    };
-}}$;
-
 # ORDER JS FUNCTIONS
 ${{
-    Order.prototype.getPattern = function(patternId) {
-        if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
+    // Order.prototype.getPattern = function(patternId) {
+    //     if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
 
-        return this.patterns[patternId]; 
-    }
+    //     return this.patterns[patternId]; 
+    // }
 
-    Order.prototype.addPattern = function(pattern) {
-        this.patterns.push(pattern);
-        this.numPatterns++;
-    }
+    // Order.prototype.addPattern = function(pattern) {
+    //     this.patterns.push(pattern);
+    //     this.numPatterns++;
+    // }
 
-    Order.prototype.removePattern = function(patternId) {
-        // first check if the pattern is referenced in the sequence
+    // Order.prototype.removePattern = function(patternId) {
+    //     // first check if the pattern is referenced in the sequence
 
-        if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
+    //     if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
 
-        for(let i = 0; i < this.sequence.length; i++) {
-            if(this.sequence[i] == patternId) return; // it has been
-        }
+    //     for(let i = 0; i < this.sequence.length; i++) {
+    //         if(this.sequence[i] == patternId) return; // it has been
+    //     }
 
-        this.patterns.splice(patternId, 1); // remove the single pattern
-        this.numPatterns--;
+    //     this.patterns.splice(patternId, 1); // remove the single pattern
+    //     this.numPatterns--;
 
-        for(let i = 0; i < this.sequence.length; i++) {
-            if(this.sequence[i] > patternId) this.sequence[i]--;
-        }
-    }
+    //     for(let i = 0; i < this.sequence.length; i++) {
+    //         if(this.sequence[i] > patternId) this.sequence[i]--;
+    //     }
+    // }
 
-    Order.prototype.removePatternFromSequence = function(patternId) {
-        if (!this.sequence.includes(patternId)) return;
+    // Order.prototype.removePatternFromSequence = function(patternId) {
+    //     if (!this.sequence.includes(patternId)) return;
 
-        this.sequence.filter(
-            (entry) => entry != patternId
-        );
-    }
+    //     this.sequence.filter(
+    //         (entry) => entry != patternId
+    //     );
+    // }
 
-    Order.prototype.setSequence = function(seq) {
-        if(!Array.isArray(seq)) return;
+    // Order.prototype.setSequence = function(seq) {
+    //     if(!Array.isArray(seq)) return;
 
-        for(let i = 0; i < seq.length; i++) {
-            const x = Number(seq[i]);
-            if(!Number.isInteger(x)) return;
-            if(x < 0 || x >= this.patterns.length) return;
-        }
+    //     for(let i = 0; i < seq.length; i++) {
+    //         const x = Number(seq[i]);
+    //         if(!Number.isInteger(x)) return;
+    //         if(x < 0 || x >= this.patterns.length) return;
+    //     }
         
-        this.sequence = seq;
-    }
+    //     this.sequence = seq;
+    // }
 
-    Order.prototype.addPatternToSequence = function(patternId, pos) {
-        if(patternId < 0 || patternId >= this.patterns.length || pos < 0) return; // out of bounds
+    // Order.prototype.addPatternToSequence = function(patternId, pos) {
+    //     if(patternId < 0 || patternId >= this.patterns.length || pos < 0) return; // out of bounds
 
-        this.sequence.splice(pos, 0, patternId);
-    }
+    //     this.sequence.splice(pos, 0, patternId);
+    // }
 
-    Order.prototype.removeEntryFromSequence = function(pos) {
-        if(pos < 0 || pos >= this.sequence.length) return; // out of bounds
+    // Order.prototype.removeEntryFromSequence = function(pos) {
+    //     if(pos < 0 || pos >= this.sequence.length) return; // out of bounds
 
-        this.sequence.splice(pos, 1);
-    }
+    //     this.sequence.splice(pos, 1);
+    // }
 
-    Order.prototype.compile = function() {
-        // call this to send data over to engine
-        let data = {};
-        const flattened = []
-        data.sequence = this.sequence;
-        data.numPatterns = this.patterns.length;
+    // Order.prototype.compile = function() {
+    //     // call this to send data over to engine
+    //     let data = {};
+    //     const flattened = []
+    //     data.sequence = this.sequence;
+    //     data.numPatterns = this.patterns.length;
 
-        for(let i = 0; i < this.patterns.length; i++) {
-            flattened.push(this.patterns[i].flatten())
-        }
+    //     for(let i = 0; i < this.patterns.length; i++) {
+    //         flattened.push(this.patterns[i].flatten())
+    //     }
 
-        data.patterns = flattened.flat();
+    //     data.patterns = flattened.flat();
 
-        return data;
-    }
+    //     return data;
+    // }
 
-    Order.prototype.toString = function() {
-        return this.getEdenCode();
-    }
+    // Order.prototype.toString = function() {
+    //     return this.getEdenCode();
+    // }
 
-    Order.prototype.getEdenCode = function () {
-        var s = "Order(" + Eden.edenCodeForValues(
-            this.obsName)+")";
-        return s;
-    }
+    // Order.prototype.getEdenCode = function () {
+    //     var s = "Order(" + Eden.edenCodeForValues(
+    //         this.obsName)+")";
+    //     return s;
+    // }
 }}$
 
 # SAMPLE JS FUNCTIONS
@@ -490,106 +349,6 @@ ${{
         return this.instruments.length;
     }
 }}$
-
-
-## PATTERN JS-EDEN FUNCTIONS
-proc createPattern {
-    para obsName
-    `pattern_{obsName}` = Pattern("pattern_" + obsName);
-}
-
-proc changeCell {
-    para pattern, cell, rowNo, columnNo
-    ${{
-        const p = arguments[0];
-        const t = arguments[1];
-
-        const r = arguments[2];
-        const c = arguments[3];
-
-        p.changeCell(r, c, t);
-
-        root.lookup(p.obsName).assign(p, root.scope, Eden.EdenSymbol.defaultAgent);
-    }}$
-}
-
-func getCell {
-    para pattern, rowNo, columnNo
-    ${{
-        const p = arguments[0];
-        const r = arguments[1];
-        const c = arguments[2];
-
-        return p.getCell(r, c);
-    }}$
-}
-
-proc setVolume {
-    para pattern, vol, rowNo, columnNo
-    ${{
-        const p = arguments[0];
-        const v = arguments[1];
-        const r = arguments[2];
-        const c = arguments[3];
-
-        if (!p.outOfBounds(r, c))
-            p.setVolume(vol, rowNo, columnNo);
-        
-        root.lookup(p.obsName).assign(p, root.scope, Eden.EdenSymbol.defaultAgent);
-    }}$
-}
-
-## ORDER JS-EDEN FUNCTIONS
-proc getPattern {
-    para patternId;
-    ${{
-        root.lookup("pattern_order").value().getPattern(patternId);
-    }}$
-}
-
-proc addPatternToSequence {
-    para patternId, pos
-    ${{
-        root.lookup("pattern_order").value().addPatternToSequence(patternId, pos);
-    }}$
-}
-
-proc removePatternFromSequence {
-    # WARNING! THIS REMOVES ALL PATTERN OCCURENCES IN THE SEQUENCE
-    para patternId
-    ${{
-        root.lookup("pattern_order").value().removePatternFromSequence(patternID);
-    }}$
-}
-
-proc removePattern {
-    para patternId;
-    ${{
-        root.lookup("pattern_order").value().removePattern(patternId);
-    }}$
-}
-
-proc addPatternToOrder {
-    para pattern;
-
-    ${{
-        root.lookup("pattern_order").value().addPattern(pattern);
-    }}$
-}
-
-proc removeEntryFromSequence {
-    para pos
-    ${{
-        root.lookup("pattern_order").value().removeEntryFromSequence(pos);
-    }}$
-}
-
-proc setSequence {
-    para seq
-    ${{
-        root.lookup("pattern_order").value().setSequence(seq);
-    }}$
-}
 
 ## INSTRUMENT JS-EDEN FUNCTIONS
 proc addInstrument {
@@ -632,35 +391,19 @@ proc createSynth {
     addInstrument(synth);
 }
 
-## SENDING
-
-proc sendOrder {
-    ${{
-        const data = root.lookup("pattern_order").value().compile();
-
-        root.lookup("engine_node").value().port.postMessage({
-            type: "pattern-order",
-            sequence: data.sequence,
-            numIndices: data.sequence.length,
-            patterns: data.patterns,
-            numPatterns: data.numPatterns
-        })
-    }}$
-}
-
 ## MIDI2NOTE
 
 func midi2note {
     para midi;
     ${{
         const midiToKey = {
-            0: "C-", 1: "C#",
-            2: "D-", 3: "D#",
-            4: "E-", 
-            5: "F-", 6: "F#",
-            7: "G-", 8: "G#",
-            9: "A-", 10: "A#",
-            11: "B-"
+             0: "C‒",  1: "C#",
+             2: "D‒",  3: "D#",
+             4: "E‒",  
+             5: "F‒",  6: "F#",
+             7: "G‒",  8: "G#",
+             9: "A‒", 10: "A#",
+            11: "B‒"
         }
 
         const octave = Math.floor(midi / 12) - 1;
@@ -671,8 +414,20 @@ func midi2note {
     }}$
 }
 
-## ACTIONS
+## ROW/CHANNEL COUNT
 
+action add_channels {
+    new_count = numberOfChannels + 1;
+    old_count = numberOfChannels;
+    # you basically have to reconstruct the array if you want to stay in JS-EDEN
+    # cell is noteId, instrumentId, vol, effect
+    old_patterns = patterns;
+    channels = old_patterns[p][r][c] if c <= new_count else [72, 0, 0, 0, 0] with c is 1..new_count;
+    rows = channels with r is 0..63
+    patterns = rows with p is 1..MAX_PATTERNS;
+}
+
+## ACTIONS
 
 action makeui {
 # Set up canvas
@@ -701,7 +456,8 @@ playRect is Rectangle(0, 0, 100, 55, "gray");
 
 topCover is Rectangle(0, 0, view_PatternEditor_width * scale, view_PatternEditor_height/2 * scale, "blue");
 bottomCover is Rectangle(0, view_PatternEditor_height/2, view_PatternEditor_width, view_PatternEditor_height/2, "#00000000", "#000000");
-channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/2 , cellWidth, view_PatternEditor_height/2, "#00000000", "#000000") with ch is 0..3;
+channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/2 , cellWidth, view_PatternEditor_height/2, "#00000000", "#000000") with ch is 0..(numChannels - 1);
+rowNoRect is 
 
 playButton is [playRect, playText];
 
@@ -710,16 +466,16 @@ patternIDTxt is Text("Pattern: " + currentPattern, 0, view_PatternEditor_height/
 
 
 # Grid Rendering
-channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/2 + 5, 30, "black", "bold") with ch is 0..3;
+channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/2 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
 rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..63
 gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y+1 == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
 noteClassifier is midi2note(patternFocus[r+1][ch+1][1]) if (patternFocus[r+1][ch+1][1] >= 12 && patternFocus[r+1][ch+1][1] <= 119) else "---";
-noteText   is Text(noteClassifier            , ch*cellWidth + gridOffset[1]                  , r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
-instrText  is Text(patternFocus[r+1][ch+1][2], ch*cellWidth + gridOffset[1] + cellWidth/5 * 2, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
-volText    is Text(patternFocus[r+1][ch+1][3], ch*cellWidth + gridOffset[1] + cellWidth/5 * 3, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
-effectText is Text(patternFocus[r+1][ch+1][4], ch*cellWidth + gridOffset[1] + cellWidth/5 * 4, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..3, r is 0..63;
+noteText   is Text(noteClassifier            , ch*cellWidth + gridOffset[1]                  , r*cellHeight + gridOffset[2], 30, "black") with ch is 0..(numChannels - 1), r is 0..63;
+instrText  is Text(patternFocus[r+1][ch+1][2], ch*cellWidth + gridOffset[1] + cellWidth/5 * 2, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..(numChannels - 1), r is 0..63;
+volText    is Text(patternFocus[r+1][ch+1][3], ch*cellWidth + gridOffset[1] + cellWidth/5 * 3, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..(numChannels - 1), r is 0..63;
+effectText is Text(patternFocus[r+1][ch+1][4], ch*cellWidth + gridOffset[1] + cellWidth/5 * 4, r*cellHeight + gridOffset[2], 30, "black") with ch is 0..(numChannels - 1), r is 0..63;
 
-gridBase is gridCell with x is 0..3, y is 0..63;
+gridBase is gridCell with x is 0..(numChannels - 1), y is 0..63;
 
 grid is [gridBase, rowNos, noteText, instrText, volText, effectText, channelIDTxt, channelRect];
 
@@ -780,23 +536,21 @@ action initUIevents {
     when(patterns[currentPattern]) {
         patternFocus is patterns[currentPattern]
     }
+
+    btn is Button("mybutton", "THIS", 0, 0);
+    when(mybutton_click) {
+        if(mybutton_click) {
+            x = 5;
+        }
+    }
+
+
 }
 action instruments {
 ## Define instruments here
 # Use Sample() and Synth(), then add to instruments
 
 
-}
-
-action scratchpad {
-## Make your patterns here
-# Pattern(name), Cell(name, noteId, instrumentId, volume, effect) (make sure the name is matched to the observable name)
-
-createPattern("patternOne");
-tri = Cell("tri", "C-5", 1, 64, 0);
-changeCell(pattern_patternOne, tri, 0, 0);
-addPatternToOrder(pattern_patternOne);
-addPatternToSequence(0, 0);
 }
 
 action config {
@@ -806,9 +560,8 @@ bpm = 140;
 ticksPerRow = 6;
 currentOrder = 0;
 currentRow = 0;
+numChannels = 4;
 current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
-
-sendOrder(); # use this to send order and pattern information to the engine for playback
 
 is_playing is false;
 }
@@ -854,7 +607,7 @@ ${{
 action initpatterns {
     # max 255 patterns to use
     # cell is noteId, instrumentId, vol, effect
-    channels = [72, 0, 0, 0, 0] with c is 1..4;
+    channels = [72, 0, 0, 0, 0] with c is 1..numChannels;
     rows = channels with r is 0..63
     patterns = rows with p is 1..MAX_PATTERNS;
 }
@@ -869,11 +622,11 @@ else createView("safemode","ScriptInput");
 action ACTIVE {
     views_list = ["myscript"];
     view_myscript_type = "ScriptInput";
-    view_myscript_tabs = [":project > config",":project > scratchpad", ":project > instruments"];
+    view_myscript_tabs = [":project > config", ":project > instruments"];
     view_myscript_current = 0;
     jseden_project_title = "Klaxon";
 
-    MAX_PATTERNS = 16;
+    MAX_PATTERNS = 255;
     MAX_CHANNELS = 127;
     MAX_ROWS = 256;
 
@@ -881,16 +634,17 @@ action ACTIVE {
     ticksPerRow = 6;
     currentOrder = 0;
     currentRow = 0;
+    numChannels = 8;
     rowsPerPattern = 64;
-    channels = 8;
     current_instrument = 1;
 
     is_playing is false;
     instrument_list = InstrumentList("instrument_list");
 
-    do :project > setuplisteners;
-    do :project > timing;
+    
     do :project > initpatterns;
     do :project > makeui;
     do :project > initUIevents;
+    do :project > setuplisteners;
+    do :project > timing;
 }
