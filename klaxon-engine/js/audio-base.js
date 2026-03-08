@@ -131,6 +131,7 @@ class MixerProcessor extends AudioWorkletProcessor {
                 for(let p = 0; p < msg.numPatterns; p++) {
                     this.rowArray[p] = msg.numRows;
                 }
+                console.log(this.rowArray);
 
                 let offset = 0;
 

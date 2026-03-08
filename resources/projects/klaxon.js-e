@@ -39,10 +39,6 @@ playbackArray = null;
 
 wasmMemory = null;
 
-proc we_are_ready {
-    ready = true;
-}
-
 ${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
         console.log(
@@ -76,7 +72,7 @@ ${{
                     );
 
                     root.lookup("patternRows").assign(
-                        new Uint8Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        new Uint16Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
                     );
 
                     root.lookup("patternOffset").assign(
@@ -84,14 +80,12 @@ ${{
                     );
 
                     root.lookup("patternOrder").assign(
-                        new Uint32Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        new Uint8Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
                     );
 
                     root.lookup("playbackArray").assign(
-                        new Uint32Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        new Uint16Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
                     );
-
-                    root.lookup("we_are_ready").trigger();
                 }
                 }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
             } else {
@@ -487,7 +481,6 @@ func getPattern {
         const rows = root.lookup("patternRows").value()[pattern_id];
 
         const patterns = root.lookup("patternArray").value();
-        console.log(patterns.length)
 
         const pattern = [];
 
@@ -502,7 +495,7 @@ func getPattern {
                 const volume =   patterns[idx+2];
                 const effectId = patterns[idx+3];
                 const param =    patterns[idx+4];
-
+                console.log(noteId);
                 row.push([
                     noteId,
                     instrId,
@@ -764,7 +757,23 @@ action initUIevents {
             patternFocus = getPattern(currentPattern - 1, numChannels);
             patternDirty = false;
         }
-    }   
+    }
+
+    when(currentRow) {
+        patternFocus = getPattern(currentPattern - 1, numChannels);
+    }
+
+    when(patternplus_click) {
+        if(patternplus_click && currentPattern < 255) {
+            currentPattern++;
+        }
+    }
+
+    when(patternminus_click) {
+        if(patternminus_click && currentPattern > 1) {
+            currentPattern--;
+        }
+    }
 
 
     btn is Button("mybutton", "THIS", 0, 0);

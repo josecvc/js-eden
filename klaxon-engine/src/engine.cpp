@@ -8,7 +8,7 @@ void Engine::init(
         uint16_t* pattern_rows,
         uint32_t* pattern_offset,
         uint8_t* pattern_order,
-        uint8_t* playback,
+        uint16_t* playback,
         int num_patterns,
         int num_channels,
         int num_cells,
@@ -106,7 +106,7 @@ int Engine::step(int frames)
 void Engine::process_row()
 {
     // find which row to process based on current_row, current_pattern
-    
+
     this->playback[ROW].store(current_row, std::memory_order_relaxed);
     int pat = pattern_info.pattern_offset[current_pattern];
 
@@ -232,7 +232,7 @@ extern "C"
         uint16_t* pattern_rows,
         uint32_t* pattern_offset,
         uint8_t* pattern_order,
-        uint8_t* playback,
+        uint16_t* playback,
         int num_patterns,
         int num_channels,
         int num_cells,

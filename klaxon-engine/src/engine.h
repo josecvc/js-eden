@@ -28,7 +28,7 @@ public:
         uint16_t* pattern_rows,
         uint32_t* pattern_offset,
         uint8_t* pattern_order,
-        uint8_t* playback,
+        uint16_t* playback,
         int num_patterns,
         int num_channels,
         int num_cells,
