@@ -5,7 +5,7 @@
 #include "wavetable.h"
 #include "polyphony.h"
 
-// TODO: Finish the instruments, adding them, modifying parameters etc.
+// TODO: Finish the instruments, adding them, modifying parameters etc. Remove virtual and either use templates or std::variant
 class Instrument
 {
 public:

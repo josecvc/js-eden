@@ -1,6 +1,21 @@
 #include "engine.h"
 
-void Engine::init(int sample_rate, int bpm, int ticks_per_row)
+void Engine::init(int sample_rate, 
+        int bpm, 
+        int ticks_per_row,
+        uint8_t* noteIds,
+        uint8_t* instrumentIds,
+        uint8_t* volume,
+        uint8_t* effectIds,
+        uint8_t* params,
+        uint16_t* pattern_rows,
+        uint32_t* pattern_offset,
+        uint8_t* pattern_order,
+        int num_patterns,
+        int num_channels,
+        int num_cells,
+        int num_orders
+    )
 {
     this->sample_rate = sample_rate;
     this->bpm = bpm;
@@ -8,6 +23,17 @@ void Engine::init(int sample_rate, int bpm, int ticks_per_row)
     this->ticks_per_row = ticks_per_row;
         
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.f  / (bpm * 24); // 24 ticks per minute tempo base
+
+    // Init pattern pointers
+    this->pattern_info.noteIds = noteIds;
+    this->pattern_info.instrumentIds = instrumentIds;
+    this->pattern_info.volume = volume;
+    this->pattern_info.effectIds = effectIds;
+    this->pattern_info.params = params;
+    this->pattern_info.pattern_rows = pattern_rows;
+    this->pattern_info.pattern_offset = pattern_offset;
+    this-> pattern_info.pattern_order = pattern_order;
+    this->pattern_info.num_orders = num_orders;
 
     this->current_samples = 0;
     this->current_ticks = 0;
@@ -86,16 +112,23 @@ void Engine::process_row()
 {
     // find which row to process based on current_row, current_pattern
 
-    auto& ptrn = order.patterns[current_pattern];
+    int pat = pattern_info.pattern_offset[current_pattern];
 
-    for (int ch = 0; ch < 1; ch++)
+    for (int ch = 0; ch < pattern_info.num_channels; ch++)
     {
-        auto& cell = ptrn.rows[current_row][ch];
-        if(cell.instrumentId > instruments.size() || cell.noteId < 12 || cell.noteId > 119 || cell.instrumentId < 1) continue;
+        // auto& cell = ptrn.rows[current_row][ch];
+        int cell = pat + current_row*pattern_info.num_channels + ch;
+        auto& noteId = pattern_info.noteIds[cell];
+        auto& instrumentId = pattern_info.instrumentIds[cell];
+        auto& volume = pattern_info.volume[cell];
+        auto& effectId = pattern_info.effectIds[cell];
+        auto& param = pattern_info.params[cell];
+
+        if(instrumentId > instruments.size() || noteId < 12 || noteId > 119 || instrumentId < 1) continue;
 
         // channels are 1-indexed (MIDI is taking channel 0)
         // instruments are 1-indexed (0 means no instrument in cell)
-        poly.add_voice(ch + 1, cell.noteId, cell.instrumentId - 1, cell.volume, 72); // "72" needs to be changed afterwards
+        poly.add_voice(ch + 1, noteId, instrumentId - 1, volume, 72); // "72" needs to be changed afterwards
     }
 }
 
@@ -105,53 +138,16 @@ void Engine::advance_row()
     if (current_row > MAX_ROWS - 1) { // 0 -> (MAX_ROWS - 1)
         current_row = 0;
 
-        if(++current_order >= order.sequence_length) {
+        if(++current_order >= pattern_info.num_orders) {
             is_playing = false;
             current_order = 0;
             current_samples = 0;
-            current_pattern = order.sequence[0];
+            current_pattern = pattern_info.pattern_order[0];
             return;
         }
         
-        current_pattern = order.sequence[current_order];
+        current_pattern = pattern_info.pattern_order[0];
     }
-}
-
-void Engine::insert_order(int* sequence, int num_indices, int* patterns, int num_patterns)
-{   
-    // instantiate patterns and sequences
-
-    order.patterns = new Pattern[num_patterns];
-    order.sequence = new int[num_indices];
-
-    for(int i = 0; i < num_indices; i++)
-    {
-        order.sequence[i] = sequence[i];
-    }
-
-    // retrieve pattern from MAX_CHANNELS * MAX_ROWS * p + MAX_CHANNELS * r + ch
-    for(int p = 0; p < num_patterns; p++)
-    {
-        Pattern pat;
-        // for each pattern fill the grid
-        for(int r = 0; r < MAX_ROWS; r++)
-        {   
-            for (int ch = 0; ch < MAX_CHANNELS; ch++)
-            {   int loc = MAX_CHANNELS * MAX_ROWS * p + MAX_CHANNELS * r + ch;
-
-                auto& cell_data = patterns[loc];
-                pat.rows[r][ch].noteId =         cell_data        & 0xFF;
-                pat.rows[r][ch].instrumentId =  (cell_data >> 8)  & 0xFF;
-                pat.rows[r][ch].volume =        (cell_data >> 16) & 0xFF;
-                pat.rows[r][ch].effectId =      (cell_data >> 24) & 0xFF;
-            }
-        }
-
-        order.patterns[p] = pat;
-    }
-
-    order.num_patterns = num_patterns;
-    order.sequence_length = num_indices;
 }
 
 void Engine::play(int order_num, int row_num)
@@ -164,7 +160,7 @@ void Engine::play(int order_num, int row_num)
 
     current_order = order_num;
     current_row = row_num;
-    current_pattern = order.sequence[order_num];
+    current_pattern = pattern_info.pattern_order[0];
 
     process_row();
 }
@@ -228,10 +224,27 @@ extern "C"
         return new Engine();
     }
 
-    void init_engine(Engine* engine, int sample_rate, int bpm, int ticks_per_row)
+    void init_engine(
+        Engine* engine, 
+        int sample_rate, 
+        int bpm, 
+        int ticks_per_row,
+        uint8_t* noteIds,
+        uint8_t* instrumentIds,
+        uint8_t* volume,
+        uint8_t* effectIds,
+        uint8_t* params,
+        uint16_t* pattern_rows,
+        uint32_t* pattern_offset,
+        uint8_t* pattern_order,
+        int num_patterns,
+        int num_channels,
+        int num_cells,
+        int num_orders
+    )
     {
         if(!engine) return;
-        engine->init(sample_rate, bpm, ticks_per_row);
+        engine->init(sample_rate, bpm, ticks_per_row, noteIds, instrumentIds, volume, effectIds, params, pattern_rows, pattern_offset, pattern_order, num_patterns, num_channels, num_cells, num_orders);
     }
 
     bool destroy_engine(Engine* engine)
@@ -315,15 +328,6 @@ extern "C"
         return 0;
     }
 
-    int read_order(Engine* engine, int* sequence, int num_indices, int* patterns, int num_patterns)
-    {
-        if (!engine) return -2;
-
-        engine->insert_order(sequence, num_indices, patterns, num_patterns);
-
-        return 0;
-    }
-
     int get_num_voices(Engine* engine)
     {
         if (!engine) return -2;
@@ -335,15 +339,19 @@ extern "C"
     int get_instrument_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
-        if(pattern_id < 0 || pattern_id >= engine->order.num_patterns) return -1;
-        return engine->order.patterns->rows[row_id][channel_id].instrumentId;
+        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
+         return engine->pattern_info.instrumentIds[
+            engine->pattern_info.pattern_offset[pattern_id] + row_id * engine->pattern_info.num_channels + channel_id
+        ];
     }
 
     int get_note_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
-        if(pattern_id < 0 || pattern_id >= engine->order.num_patterns) return -1;
-        return engine->order.patterns->rows[row_id][channel_id].noteId;
+        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
+        return engine->pattern_info.noteIds[
+            engine->pattern_info.pattern_offset[pattern_id] + row_id * engine->pattern_info.num_channels + channel_id
+        ];
     }
     
     int get_current_row(Engine* engine)

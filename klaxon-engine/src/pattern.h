@@ -30,4 +30,22 @@ struct Order {
     int* sequence;
 };
 
+
+struct PatternInfo {
+    uint8_t* noteIds;
+    uint8_t* instrumentIds;
+    uint8_t* volume;
+    uint8_t* effectIds;
+    uint8_t* params;
+
+    uint16_t* pattern_rows;
+    uint32_t* pattern_offset;
+     uint8_t* pattern_order;
+
+    int num_patterns;
+    int num_channels;
+    int num_cells;
+    int num_orders; 
+};
+
 #endif

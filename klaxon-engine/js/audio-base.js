@@ -22,8 +22,6 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.playMidi(msg);
             } else if (msg.type == "note_off") {
                 this.stopMidi(msg);
-            } else if (msg.type == "pattern-order") {
-                this.setOrder(msg);
             } else if (msg.type == "bpm") {
                 this.setBPM(msg);
             } else if (msg.type == "rows-per-beat") {
@@ -41,10 +39,6 @@ class MixerProcessor extends AudioWorkletProcessor {
         WebAssembly.instantiate(msg.wasm, importObject)
             .then((obj) => {
                 this.wasm = obj.instance
-
-                
-
-                // TODO: Add pattern data
                 
                 this.HEAPU8 = new Uint8Array(this.wasm.exports.memory.buffer); 
                 this.HEAPU32 = new Uint32Array(this.wasm.exports.memory.buffer); 
@@ -77,8 +71,39 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.HEAPU32[(this.outputTablePtr >> 2) + 0] = this.leftPtr;
                 this.HEAPU32[(this.outputTablePtr >> 2) + 1] = this.rightPtr;
                 
-                // void init_engine(Engine* engine, int sample_rate, int bpm, int ticks_per_row)
-                this.wasm.exports.init_engine(this.enginePtr, msg.sampleRate, msg.bpm, msg.ticksPerRow);
+                // void init(int sample_rate, 
+                //     int bpm, 
+                //     int ticks_per_row,
+                //     uint8_t* noteIds,
+                //     uint8_t* instrumentIds,
+                //     uint8_t* volume,
+                //     uint8_t* effectIds,
+                //     uint8_t* params,
+                //     uint16_t* pattern_rows,
+                //     uint32_t* pattern_offset,
+                //     uint8_t* pattern_order,
+                //     int num_patterns,
+                //     int num_channels,
+                //     int num_cells,
+                //     int num_orders
+                // )
+                this.wasm.exports.init_engine(
+                    this.enginePtr, 
+                    msg.sampleRate, 
+                    msg.bpm, 
+                    msg.ticksPerRow,
+                    msg.buffers.noteArray,
+                    msg.buffers.instrArray,
+                    msg.buffers.volArray,
+                    msg.buffers.effectArray,
+                    msg.buffers.patternRows,
+                    msg.buffers.patternOffset,
+                    msg.buffers.patternOrder,
+                    msg.sizes.patterrns,
+                    msg.sizes.channels,
+                    msg.sizes.totalCells,
+                    msg.sizes.orders
+                );
 
                 this.sampleRate = msg.sampleRate;
                 this.bpm = msg.bpm;
@@ -88,8 +113,7 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.rowNo = 0;
                 this.patternNo = 0;
                 this.b = 0;
-
-                this.test = false;
+                
             })
             .catch((e) => {
                 console.log("Error: Failed to instantiate WebAssembly module.\n" + e);
@@ -136,35 +160,6 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     stopMidi(msg) {
         const res = this.wasm.exports.stop_from_midi(this.enginePtr, msg.instrumentId, msg.note);
-    }
-
-    setOrder(msg) {        
-        // pointers and heaps to memory
-        const sequencePtr = this.wasm.exports.malloc(msg.sequence.length * 4);
-        const patternPtr = this.wasm.exports.malloc(msg.patterns.length * 4);
-
-        const sequenceHeap = new Int32Array(
-            this.wasm.exports.memory.buffer,
-            sequencePtr,
-            msg.sequence.length
-        );
-
-        const patternHeap = new Int32Array(
-            this.wasm.exports.memory.buffer,
-            patternPtr,
-            msg.patterns.length
-        );
-
-        sequenceHeap.set(msg.sequence);
-        patternHeap.set(msg.patterns);
-
-        // int read_order(Engine* engine, int* sequence, int sequence_length, int* patterns, int pattern_length)
-        const res = this.wasm.exports.read_order(this.enginePtr, sequencePtr, msg.numIndices, patternPtr, msg.numPatterns);
-
-        this.wasm.exports.free(sequencePtr);
-        this.wasm.exports.free(patternPtr);
-
-        console.log(res);
     }
 
     setBPM(msg) {

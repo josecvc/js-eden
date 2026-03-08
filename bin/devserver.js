@@ -10,7 +10,17 @@ var serveStatic = require('serve-static');
 var port = 8000;
 
 var app = connect();
+
+// I USE THIS FOR SHAREDARRAYBUFFER DON'T PANIC
+app.use(function (req, res, next) {
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+  next();
+});
+
+
 app.use(serveStatic('.')).listen(port, function () {
   console.log('JS-Eden instance running at http://localhost:'+port);
 });
+
 

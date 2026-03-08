@@ -16,7 +16,22 @@ public:
     Engine() {}
     Engine(int sample_rate, int bpm, int ticks_per_row) : sample_rate(sample_rate), bpm(bpm), ticks_per_row(ticks_per_row) {}
 
-    void init(int sample_rate, int bpm, int ticks_per_row);
+    void init(int sample_rate, 
+        int bpm, 
+        int ticks_per_row,
+        uint8_t* noteIds,
+        uint8_t* instrumentIds,
+        uint8_t* volume,
+        uint8_t* effectIds,
+        uint8_t* params,
+        uint16_t* pattern_rows,
+        uint32_t* pattern_offset,
+        uint8_t* pattern_order,
+        int num_patterns,
+        int num_channels,
+        int num_cells,
+        int num_orders
+    );
 
     // playback
     int process(float** output, int frames);
@@ -27,7 +42,6 @@ public:
     void advance_row();
 
     // playback mutation
-    void insert_order(int* patterns, int num_patterns, int* sequence, int num_indices);
     void play(int order, int row);
     void pause();
     void stop();
@@ -58,7 +72,9 @@ public:
 
     int instrument_count; // use this to switch to Instrument[MAX_INSTRUMENTS]
     
-    Order order;
+    // Pattern information
+    PatternInfo pattern_info;
+
     std::vector<std::unique_ptr<Instrument>> instruments;
     Polyphony poly;
     // Channel channels; maybe?? 
