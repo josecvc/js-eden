@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <memory>
+#include <atomic>
 
 #include "instrument.h"
 #include "pattern.h"
@@ -12,21 +13,22 @@ class Engine
 {
 public:
     static constexpr int MAX_INSTRUMENTS = 32;
+    static constexpr int ROW = 0;
+    static constexpr int PATTERN = 1;
+    static constexpr int ORDER = 2;
 
     Engine() {}
     Engine(int sample_rate, int bpm, int ticks_per_row) : sample_rate(sample_rate), bpm(bpm), ticks_per_row(ticks_per_row) {}
 
-    void init(int sample_rate, 
+    void init(
+        int sample_rate, 
         int bpm, 
         int ticks_per_row,
-        uint8_t* noteIds,
-        uint8_t* instrumentIds,
-        uint8_t* volume,
-        uint8_t* effectIds,
-        uint8_t* params,
+        uint8_t* patterns,
         uint16_t* pattern_rows,
         uint32_t* pattern_offset,
         uint8_t* pattern_order,
+        uint8_t* playback,
         int num_patterns,
         int num_channels,
         int num_cells,
@@ -69,6 +71,8 @@ public:
     short current_row;
     short current_order;
     short current_pattern;
+
+    std::atomic<uint16_t>* playback;
 
     int instrument_count; // use this to switch to Instrument[MAX_INSTRUMENTS]
     

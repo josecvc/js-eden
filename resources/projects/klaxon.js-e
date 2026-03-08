@@ -30,54 +30,20 @@ NUM_ROWS is 64;
 NUM_CHANNELS is 8;
 NUM_ORDERS is 255;
 
-size is NUM_PATTERNS * NUM_ROWS * NUM_CHANNELS;
+patternArray = null;
+patternRows = null;
+patternOffset = null;
+patternOrder = null;
 
-noteBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("size").value())}}$;
-instrBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("size").value())}}$;
-volBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("size").value())}}$;
-effectBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("size").value())}}$;
-paramBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("size").value())}}$;
+playbackArray = null;
 
-rowBuffer = ${{new SharedArrayBuffer(Uint16Array.BYTES_PER_ELEMENT * root.lookup("NUM_PATTERNS").value())}}$;
-offsetBuffer = ${{new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT * root.lookup("NUM_PATTERNS").value())}}$;
-orderBuffer = ${{new SharedArrayBuffer(Uint8Array.BYTES_PER_ELEMENT * root.lookup("NUM_ORDERS").value())}}$;
+wasmMemory = null;
 
-playbackBuffer = ${{new SharedArrayBuffer(Uint16Array.BYTES_PER_ELEMENT * 3);}}$
+proc we_are_ready {
+    ready = true;
+}
 
-
-noteArray = ${{new Uint8Array(root.lookup("noteBuffer").value())}}$;
-instrArray = ${{new Uint8Array(root.lookup("instrBuffer").value())}}$;
-volArray = ${{new Uint8Array(root.lookup("volBuffer").value())}}$;
-effectArray = ${{new Uint8Array(root.lookup("effectBuffer").value())}}$;
-paramArray = ${{new Uint8Array(root.lookup("paramBuffer").value())}}$;
-
-patternRows = ${{new Uint16Array(root.lookup("rowBuffer").value())}}$;
-patternOffset = ${{new Uint32Array(root.lookup("offsetBuffer").value())}}$;
-patternOrder = ${{new Uint8Array(root.lookup("orderBuffer").value())}}$;
-
-playbackArray = ${{new Uint8Array(root.lookup("playbackBuffer").value());}}$
-
-${{
-    // Create SharedArrayBuffer
-    // Init Engine with 64 rows per pattern with 8 channels
-
-    const NUM_PATTERNS = 255;
-    const NUM_ROWS = 64;
-    const NUM_CHANNELS = 8;
-    const NUM_ORDERS = 255;
-
-    // init patterns with 64 rows
-    for(let p = 0; p < NUM_PATTERNS; p++) {
-        root.lookup("patternRows").value()[p] = NUM_ROWS;
-    }
-
-    let offset = 0;
-
-    for(let p = 0; p < NUM_PATTERNS; p++) {
-        root.lookup("patternOffset").value()[p] = offset;
-        offset += root.lookup("patternRows").value()[p] * NUM_CHANNELS;
-    }
-    
+${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
         console.log(
             root.lookup("ctx").value().sampleRate
@@ -95,24 +61,38 @@ ${{
                     sampleRate: root.lookup("ctx").value().sampleRate,
                     bpm: 140,
                     ticksPerRow: 6,
-                    buffers:  {
-                        note: root.lookup("noteArray").value(),
-                        instr: root.lookup("instrArray").value(),
-                        vol: root.lookup("volArray").value(),
-                        effect: root.lookup("effectArray").value(),
-                        param: root.lookup("paramArray").value(),
-                        rows: root.lookup("patternRows").value(),
-                        offset: root.lookup("patternOffset").value(),
-                        order: root.lookup("patternOrder").value(),
-                        playback: root.lookup("playbackArray").value()
-                    },
-                    sizes: {
-                        patterns: 255,
-                        channels: 8,
-                        totalCells: 255 * 8 * 64,
-                        orders: 1
-                    }
+                    numPatterns: 255,
+                    numRows: 64,
+                    numChannels: 8
                     })
+
+                node.port.onmessage = (e) => {
+                    root.lookup("wasmMemory").assign(
+                        e.data.mem, root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("patternArray").assign(
+                        new Uint8Array(e.data.mem, e.data.patternPtr, e.data.patternLength), root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("patternRows").assign(
+                        new Uint8Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("patternOffset").assign(
+                        new Uint32Array(e.data.mem, e.data.offsetPtr, e.data.offsetLength), root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("patternOrder").assign(
+                        new Uint32Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("playbackArray").assign(
+                        new Uint32Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
+                    );
+
+                    root.lookup("we_are_ready").trigger();
+                }
                 }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
             } else {
                 throw new Error(res.status);
@@ -506,23 +486,22 @@ func getPattern {
         const patternStart = root.lookup("patternOffset").value()[pattern_id];
         const rows = root.lookup("patternRows").value()[pattern_id];
 
-        const noteIds = root.lookup("noteArray").value();
-        const instrIds = root.lookup("instrArray").value();
-        const volumes = root.lookup("volArray").value();
-        const effectIds = root.lookup("effectArray").value();
-        const params = root.lookup("paramArray").value();
+        const patterns = root.lookup("patternArray").value();
+        console.log(patterns.length)
 
         const pattern = [];
+
+        const numElements = 5;
 
         for(let r = 0; r < rows; r++) {
             const row = []
             for(let ch = 0; ch < num_channels; ch++) {
-                let idx = patternStart + r * num_channels + ch;
-                const noteId = noteIds[idx];
-                const instrId = instrIds[idx];
-                const volume = volumes[idx];
-                const effectId = effectIds[idx];
-                const param = params[idx];
+                let idx = patternStart + (r * num_channels + ch) * numElements;
+                const noteId =   patterns[idx];
+                const instrId =  patterns[idx+1];
+                const volume =   patterns[idx+2];
+                const effectId = patterns[idx+3];
+                const param =    patterns[idx+4];
 
                 row.push([
                     noteId,
@@ -542,54 +521,46 @@ func getPattern {
 
 func setNote {
     para noteId, idx
-    ${{root.lookup("noteArray").value()[idx] = noteId;}}$
+    ${{root.lookup("patternArray").value()[idx] = noteId;}}$
     patternDirty = true;
 }
 
 func setInstrument {
     para instrId, idx
-    ${{root.lookup("instrArray").value()[idx] = instrId;}}$
+    ${{root.lookup("patternArray").value()[idx] = instrId;}}$
     patternDirty = true;
 }
 
 func setVolume {
     para volume, idx
-    ${{root.lookup("volArray").value()[idx] = volume;}}$
+    ${{root.lookup("patternArray").value()[idx] = volume;}}$
     patternDirty = true;
 }
 
 func setEffect {
     para effectId, idx
-    ${{root.lookup("effectArray").value()[idx] = effectId;}}$
+    ${{root.lookup("patternArray").value()[idx] = effectId;}}$
     patternDirty = true;
 }
 
 func setParam {
     para param, idx
-    ${{root.lookup("paramArray").value()[idx] = param;}}$
+    ${{root.lookup("patternArray").value()[idx] = param;}}$
     patternDirty = true;
 }
 
 ## ROW/CHANNEL COUNT
 
 action add_channels {
-    new_count = numberOfChannels + 1;
-    old_count = numberOfChannels;
-    # you basically have to reconstruct the array if you want to stay in JS-EDEN
-    # cell is noteId, instrumentId, vol, effect
-    old_patterns = patterns;
-    channels = old_patterns[p][r][c] if c <= new_count else [72, 0, 0, 0, 0] with c is 1..new_count;
-    rows = channels with r is 0..63
-    patterns = rows with p is 1..MAX_PATTERNS;
+    # you're gonna have to free everything and reconstruct the samples properly
 }
 
 ## ACTIONS
 
 action makeui {
 # Set up canvas
-createCanvas("PatternEditor", "editorCanvas", "Pattern Editor");
+createCanvas("PatternEditor", "editorCanvas", "Klaxon Tracker");
 patternFocus = getPattern(currentPattern - 1, numChannels);
-
 
 mouseWheelEnabled = true;
 view_PatternEditor_width = 1193;
@@ -598,32 +569,83 @@ view_PatternEditor_x = 295.5;
 view_PatternEditor_y = 8.5;
 
 scale = 0.75;
+fontSize is 30 * scale;
+buttonSize is 30 * scale;
+
+# Cell Size
 cellWidth is view_PatternEditor_width/6 * scale;
 cellHeight is view_PatternEditor_height/24 * scale;
 
-gridOffset is [40, 3* view_PatternEditor_height / 4 - currentRow*cellHeight]
+gridOffset  is [40, 3 * view_PatternEditor_height / 4 - currentRow*cellHeight]
+orderOffset is [view_PatternEditor_width/50,  view_PatternEditor_height / 16 - (currentOrder+1)*fontSize + 7]
 
-# Timing
-tempoText is Text(bpm, 0, 50, 50, "white", "#CBE5D4");
-
-playText is Text("Play", 0, 0, 50, "white", "#CBE5D4");
-playRect is Rectangle(0, 0, 100, 55, "gray");
-
-topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/2, "blue");
-bottomCover is Rectangle(0, view_PatternEditor_height/2, view_PatternEditor_width, view_PatternEditor_height/2, "#00000000", "#000000");
+# Covers
+topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/2, "#625353", "#000000"); # add gradient afterwards
+bottomCover is Rectangle(0, view_PatternEditor_height/2, view_PatternEditor_width, view_PatternEditor_height/2, "#74747400", "#000000");
 channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/2 , cellWidth, view_PatternEditor_height/2, "#00000000", "#000000") with ch is 0..(numChannels - 1);
-# rowNoRect is 
 
-playButton is [playRect, playText];
+instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/2, view_PatternEditor_height/4, "#784545", "#000000");
+samplesBg is Rectangle(view_PatternEditor_width/2, view_PatternEditor_height/4, view_PatternEditor_width/2, view_PatternEditor_height/4, "#784545", "#000000");
 
-# Current Pattern
-patternIDTxt is Text("Pattern: " + (currentPattern - 1), 0, view_PatternEditor_height/2 - 30 * 1.75, 30, "black", "#000000");
+orderBackground is Rectangle(0, 0, view_PatternEditor_width/8, view_PatternEditor_height/8, "#784545", "#000000");
+orderSeqSep is Rectangle(0, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
+orderPatSep is Rectangle(view_PatternEditor_width/16, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
 
+# Buttons
+playButton is Button("playbtn", "Play", 0, view_PatternEditor_height/4, buttonSize * 4, buttonSize * 2);
+stopButton is Button("stopbtn", "Stop", 0, view_PatternEditor_height/4 + buttonSize * 2, buttonSize * 4, buttonSize * 2);
+
+tempoPlusButton is Button("tempoplus",   "+", view_PatternEditor_width/4.5, view_PatternEditor_height/15      , buttonSize, buttonSize);
+tempoMinusButton is Button("tempominus", "-", view_PatternEditor_width/4.5 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
+
+speedPlusButton is Button("speedplus", "+", view_PatternEditor_width/4.5, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+speedMinusButton is Button("speedminus", "-", view_PatternEditor_width/4.5 + buttonSize, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+
+patternPlusButton is Button("patternplus", "+", view_PatternEditor_width/2.75, view_PatternEditor_height/15, buttonSize, buttonSize);
+patternMinusButton is Button("patternminus", "-", view_PatternEditor_width/2.75 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
+
+orderInsertButton is Button("orderinsert", "Ins.", 0, view_PatternEditor_height/8, buttonSize*2, buttonSize);
+orderDelButton is Button("orderdelete", "Del.", buttonSize*2, view_PatternEditor_height/8, buttonSize*2, buttonSize);
+
+sampleLoadButton is Button("sampleload", "Load", view_PatternEditor_width/2 + fontSize*4, view_PatternEditor_height/4, buttonSize*2, buttonSize);
+sampleClearButton is Button("sampleclear", "Clear", view_PatternEditor_width/2 + buttonSize*2 + fontSize*4, view_PatternEditor_height/4, buttonSize*2, buttonSize);
+
+buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton, 
+    speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
+    orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton
+];
+
+# Information
+titleText is Text("KlaxonTracker", 3 * view_PatternEditor_width/16, 0, fontSize * 2, "white", "bold");
+instrIndicator is Text("Instruments", view_PatternEditor_width/2, 0, fontSize, "white");
+sampleIndicator is Text("Samples", view_PatternEditor_width/2, view_PatternEditor_height/4, fontSize, "white");
+
+tempoText is Text("BPM  " + bpm, view_PatternEditor_width/8, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
+speedText is Text("SPD  " + ticksPerRow, view_PatternEditor_width/8, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
+patternIDTxt is Text("Pattern: " + (currentPattern - 1), view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
+
+information is [titleText, tempoText, speedText, patternIDTxt, instrIndicator, sampleIndicator];
+
+# Order Rendering
+seqClassifier is "0" + s if(s < 10) else s;
+patClassifier is "0" + patternOrder[s+1] if (patternOrder[s+1] < 10) else patternOrder[s+1];
+
+orderCell is Rectangle(0, 0 + orderOffset[2], cellWidth, cellHeight, "#c95757");
+
+seqNum  is Text(seqClassifier, 0 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
+patNum is Text(patClassifier, view_PatternEditor_width/16 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
+
+orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSeqSep];
+
+# Sample List Rendering
+sampleNum is Text(seqClassifier, 0 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..( - 1);
+
+sampleListRender is [sampleNum]
 
 # Grid Rendering
 channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/2 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
 rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..63
-gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y+1 == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
+gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
 
 # Cell Mutation
 noteClassifier is midi2note(patternFocus[r+1][ch+1][1]) if (patternFocus[r+1][ch+1][1] >= 12 && patternFocus[r+1][ch+1][1] <= 119) else "---";
@@ -644,7 +666,7 @@ gridBase is gridCell with x is 0..(numChannels - 1), y is 0..63;
 grid is [gridBase, rowNos, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect];
 
 # In render order
-editorCanvas is [bottomCover, grid, topCover, playButton, patternIDTxt, tempoText];
+editorCanvas is [bottomCover, grid, topCover, instrumentsBg, samplesBg, orderBg, orderRender, information, buttons];
 }
 
 action initUIevents {
@@ -653,7 +675,7 @@ action initUIevents {
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3);
+    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3 && mouseY >= view_PatternEditor_height/2);
 
     cellScroll = false;
 
@@ -670,7 +692,7 @@ action initUIevents {
     }
 
     when(mouseWheel) {
-        if(!mousePressed || !mouseOverCell) {
+        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/2) {
             ${{console.log("Scrolling...")}}$
             if(mouseWheelVelocity > 0) {
                 currentRow++;
@@ -678,9 +700,9 @@ action initUIevents {
                 currentRow--;
             }
         } else if (mouseOverCell) {
-            idx = patternOffset[currentPattern] +  rowFocus * numChannels + channelFocus + 1; # 1-indexed
+            idx = patternOffset[currentPattern] +  (rowFocus * numChannels + channelFocus) * 5 + 1; # 1-indexed
             if(elementFocus == 0) { # note
-                temp = noteArray[idx];
+                temp = patternArray[idx];
                 
                 if(mouseWheelVelocity < 0 && temp < 119) {
                     temp = temp + 1;
@@ -688,9 +710,9 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setNote(temp, idx - 1);
+                setNote(temp, idx - 1 + 0);
             } else if (elementFocus == 1) { # instrument
-                temp = instrArray[idx];
+                temp = patternArray[idx + 1];
 
                 if(mouseWheelVelocity < 0 && temp < 127) {
                     temp = temp + 1;
@@ -698,9 +720,9 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setInstrument(temp, idx - 1);
+                setInstrument(temp, idx - 1 + 1);
             } else if (elementFocus == 2) { # volume
-                temp = volArray[idx];
+                temp = patternArray[idx + 2];
                 
                 if(mouseWheelVelocity < 0 && temp < 100) {
                     temp = temp + 1;
@@ -708,9 +730,9 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setVolume(temp, idx - 1);
+                setVolume(temp, idx - 1 + 2);
             } else if (elementFocus == 3) { # effect
-                temp = effectArray[idx];
+                temp = patternArray[idx + 3];
                 
                 if(mouseWheelVelocity < 0 && temp < 26) {
                     temp = temp + 1;
@@ -718,9 +740,9 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setEffect(temp, idx - 1);
+                setEffect(temp, idx - 1 + 3);
             } else if (elementFocus == 4) { # param
-                temp = paramArray[idx];
+                temp = patternArray[idx + 4];
                 
                 if(mouseWheelVelocity < 0 && temp < 255) {
                     temp = temp + 1;
@@ -728,7 +750,7 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setParam(temp, idx - 1);
+                setParam(temp, idx - 1 + 4);
             }
         }
     }
@@ -811,6 +833,13 @@ ${{
 }}$
 }
 
+action start {
+    do :project > makeui;
+    do :project > initUIevents;
+    do :project > setuplisteners;
+    do :project > timing;
+}
+
 # NATIVE EVENT LISTENERS
 
 do lib:unexecuted;
@@ -835,17 +864,17 @@ action ACTIVE {
     currentPattern = 1;
     currentRow = 0;
     numChannels = 8;
+    numOrders = 1;
+
+    numSamples = 0;
+
     rowsPerPattern = 64;
     current_instrument = 1;
 
     patternDirty = false;
+    ready = false;
 
     is_playing is false;
     order = 0 with i is 1..255;
     instrument_list = InstrumentList("instrument_list");
-    
-    do :project > makeui;
-    do :project > initUIevents;
-    do :project > setuplisteners;
-    do :project > timing;
 }
