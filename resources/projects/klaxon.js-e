@@ -30,14 +30,6 @@ NUM_ROWS is 64;
 NUM_CHANNELS is 8;
 NUM_ORDERS is 255;
 
-patternArray = null;
-patternRows = null;
-patternOffset = null;
-patternOrder = null;
-
-playbackArray = null;
-
-wasmMemory = null;
 samplePool = [];
 
 ${{   
@@ -62,51 +54,8 @@ ${{
                     numRows: 64,
                     numChannels: 8
                     })
-
-                node.port.onmessage = (e) => {
-                    if(e.data.type == "shared") {
-                        root.lookup("wasmMemory").assign(
-                            e.data.mem, root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-
-                        root.lookup("patternArray").assign(
-                            new Uint8Array(e.data.mem, e.data.patternPtr, e.data.patternLength), root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-
-                        root.lookup("patternRows").assign(
-                            new Uint16Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-
-                        root.lookup("patternOffset").assign(
-                            new Uint32Array(e.data.mem, e.data.offsetPtr, e.data.offsetLength), root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-
-                        root.lookup("patternOrder").assign(
-                            new Uint8Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-
-                        root.lookup("playbackArray").assign(
-                            new Uint16Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
-                        );
-                    } else if (e.data.type == "sample") {
-                        root.lookup("samplePool").value().push(
-                            {
-                                filename: e.data.filename,
-                                leftPtr: e.data.leftPtr,
-                                rightPtr: e.data.rightPtr,
-                                leftHeap: e.data.leftHeap,
-                                rightHeap: e.data.leftHeap,
-                                sampleRate: e.data.sampleRate,
-                                channels: e.data.channels,
-                                length: e.data.duration,
-                            }
-                        )
-                    }  
-                }
-
-                
                 }).then((res) => {
-                    setTimeout(()=>{ root.lookup("wasmReady").assign(true, root.scope)}, 1000);
+                    setTimeout(()=>{ root.lookup("wasmReady").assign(true, root.scope)}, 500);
                    
                 }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
             } else {
@@ -263,13 +212,47 @@ func addSample {
             const encoder = new TextEncoder();
             root.lookup("engine_node").value().port.postMessage({
                type: "sample",
+               id: root.lookup("samplePool").value().length,
                filename: file.name,
                encoded: encoder.encode(file.name),
-               numberOfChannels: data.numberOfChannels,
+               channels: data.numberOfChannels,
                sampleRate: data.sampleRate,
                duration: data.length,
                data: [left, right],
             })
+
+            const blockSize = Math.floor(data.length / 1024);
+            const wf = new Float32Array(1024);
+
+            const monoform = new Float32Array(data.length);
+
+            for (let i = 0; i < data.length; i++) {
+                monoform[i] = (left[i] + right[i]) * 0.5;
+            }
+
+            for (let i = 0; i < 1024; i++) {
+                let sum = 0;
+                const start = i * blockSize;
+                const end = Math.min(start + blockSize, data.length);
+                
+                for (let j = start; j < end; j++) sum += monoform[j];
+
+                wf[i] = sum / (end - start);
+            }
+
+            root.lookup("samplePool").value().push(
+                {
+                    filename: file.name,
+                    sampleRate: data.sampleRate,
+                    channels: data.numberOfChannels,
+                    length: data.length,
+                    waveform: wf,
+                    leftPtr: 0,
+                    rightPtr: 0
+                }
+            )
+
+            root.lookup("sampleDirty").assign(true, root.scope);
         }
 
         picker.click();
@@ -536,32 +519,47 @@ func getPattern {
 }
 
 func setNote {
-    para noteId, idx
-    ${{root.lookup("patternArray").value()[idx] = noteId;}}$
+    para id, idx, cell
+    ${{
+        root.lookup("patternArray").value()[idx] = id;
+        root.lookup("engine_node").value().port.postMessage({type: "note_set", id: id, calcIndex: cell});
+    }}$
     patternDirty = true;
 }
 
 func setInstrument {
-    para instrId, idx
-    ${{root.lookup("patternArray").value()[idx] = instrId;}}$
+    para id, idx, cell
+    ${{
+        root.lookup("patternArray").value()[idx] = id;
+        root.lookup("engine_node").value().port.postMessage({type: "instr_set", id: id, calcIndex: cell});
+    }}$
     patternDirty = true;
 }
 
 func setVolume {
-    para volume, idx
-    ${{root.lookup("patternArray").value()[idx] = volume;}}$
+    para id, idx, cell
+    ${{
+        root.lookup("patternArray").value()[idx] = id;
+        root.lookup("engine_node").value().port.postMessage({type: "vol_set", id: id, calcIndex: cell});
+    }}$
     patternDirty = true;
 }
 
 func setEffect {
-    para effectId, idx
-    ${{root.lookup("patternArray").value()[idx] = effectId;}}$
+    para id, idx, cell
+    ${{
+        root.lookup("patternArray").value()[idx] = id;
+        root.lookup("engine_node").value().port.postMessage({type: "effect_set", id: id, calcIndex: cell});
+    }}$
     patternDirty = true;
 }
 
 func setParam {
-    para param, idx
-    ${{root.lookup("patternArray").value()[idx] = param;}}$
+    para id, idx, cell
+    ${{
+        root.lookup("patternArray").value()[idx] = id;
+        root.lookup("engine_node").value().port.postMessage({type: "param_set", id: id, calcIndex: cell});
+    }}$
     patternDirty = true;
 }
 
@@ -572,6 +570,10 @@ action add_channels {
 }
 
 ## ACTIONS
+
+action updatesamplelist {
+    
+}
 
 action makeui {
 # Set up canvas
@@ -594,6 +596,7 @@ cellHeight is view_PatternEditor_height/24 * scale;
 
 gridOffset  is [40, view_PatternEditor_height/1.7 - currentRow*cellHeight]
 orderOffset is [view_PatternEditor_width/50,  view_PatternEditor_height / 16 - (currentOrder+1)*fontSize + 7]
+
 
 # Covers
 topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/4, "#625353", "#000000"); # add gradient afterwards
@@ -671,7 +674,11 @@ instrListRender is [instrumentsBg, instrNum, instrSep]
 # Sample List Rendering
 sampleNum is Text(s, 3 * view_PatternEditor_width/4, s*fontSize + orderOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
-sampleListRender is [samplesBg, sampleNum, sampleSep]
+sampleName is samplePool[s+1].filename if (s+1 <= samplePool.length) else "";
+
+sampleText is Text(sampleName, 3 * view_PatternEditor_width/4 + fontSize, s*fontSize + orderOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+
+sampleListRender is [samplesBg, sampleNum, sampleText, sampleSep]
 
 # Grid Rendering
 channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/4 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
@@ -704,9 +711,12 @@ action initUIevents {
     mouseHoverRow is floor((mouseY - gridOffset[2])/cellHeight);
     mouseHoverChannel is floor((mouseX - gridOffset[1])/cellWidth);
 
+    mouseHoverInstrument is floor((mouseY - 2*fontSize + orderOffset[2])/fontSize);
+
+
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3 && mouseY >= view_PatternEditor_height/2);
+    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3 && mouseY >= view_PatternEditor_height/4);
 
     cellScroll = false;
 
@@ -718,12 +728,11 @@ action initUIevents {
             elementFocus = mouseHoverElement;
             cellScroll = true;
             ${{console.log(root.lookup("elementFocus").value())}}$
-            
         }
     }
 
     when(mouseWheel) {
-        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/2) {
+        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/4) {
             ${{console.log("Scrolling...")}}$
             if(mouseWheelVelocity > 0) {
                 currentRow++;
@@ -732,6 +741,7 @@ action initUIevents {
             }
         } else if (mouseOverCell) {
             idx = patternOffset[currentPattern] +  (rowFocus * numChannels + channelFocus) * 5 + 1; # 1-indexed
+            cellIdx = patternOffset[currentPattern] + rowFocus * numChannels + channelFocus;
             if(elementFocus == 0) { # note
                 temp = patternArray[idx];
                 
@@ -741,7 +751,8 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setNote(temp, idx - 1 + 0);
+                setNote(temp, idx - 1 + 0, cellIdx);
+                setInstrument(current_instrument, idx - 1 + 1, cellIdx)
             } else if (elementFocus == 1) { # instrument
                 temp = patternArray[idx + 1];
 
@@ -751,7 +762,7 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setInstrument(temp, idx - 1 + 1);
+                setInstrument(temp, idx - 1 + 1, cellIdx);
             } else if (elementFocus == 2) { # volume
                 temp = patternArray[idx + 2];
                 
@@ -761,7 +772,7 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setVolume(temp, idx - 1 + 2);
+                setVolume(temp, idx - 1 + 2, cellIdx);
             } else if (elementFocus == 3) { # effect
                 temp = patternArray[idx + 3];
                 
@@ -771,7 +782,7 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setEffect(temp, idx - 1 + 3);
+                setEffect(temp, idx - 1 + 3, cellIdx);
             } else if (elementFocus == 4) { # param
                 temp = patternArray[idx + 4];
                 
@@ -781,7 +792,7 @@ action initUIevents {
                     temp = temp - 1;  
                 }
 
-                setParam(temp, idx - 1 + 4);
+                setParam(temp, idx - 1 + 4, cellIdx);
             }
         }
     }
@@ -819,6 +830,73 @@ action initUIevents {
             createSample("smp");
         }
     }
+
+    when(sampleDirty) {
+        if (sampleDirty) {
+            do :project > makeui;
+            sampleDirty = false;
+        }
+    }
+
+    when(playbtn_click) {
+        if(playbtn_click && is_playing == false) {
+            is_playing = true;
+        }
+    }
+
+    when(stopbtn_click) {
+        if(stopbtn_click && is_playing == true) {
+            is_playing = false;
+        }
+    }
+
+    when(tempoplus_click) {
+        if(bpm < 255) {
+            bpm++;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "bpm", value: root.lookup("bpm").value()
+                })
+            }}$
+        }
+    }
+
+    when(tempominus_click) {
+        if(bpm > 10) {
+            bpm--;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "bpm", value: root.lookup("bpm").value()
+                })
+            }}$
+        }
+    }
+
+     when(speedplus_click) {
+        if(ticksPerRow < 12) {
+            ticksPerRow++;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "speed", value: root.lookup("ticksPerRow").value()
+                })
+            }}$
+        }
+    }
+
+    when(speedminus_click) {
+        if(bpm > 1) {
+            ticksPerRow--;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "speed", value: root.lookup("ticksPerRow").value()
+                })
+            }}$
+        }
+    }
 }
 action instruments {
 ## Define instruments here
@@ -839,6 +917,22 @@ numChannels = 8;
 current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
 
 is_playing is false;
+}
+
+action makepattern {
+    size = NUM_PATTERNS * NUM_ROWS * NUM_CHANNELS * 5;
+    patternArray = 0 with i is 1..size;
+    patternOrder = 0 with i is 1..NUM_ORDERS;
+    patternRows = 64 with i is 1..NUM_PATTERNS;
+
+    offset = 0;
+
+    patternOffset = 0 with i is 1..NUM_PATTERNS;
+    
+    for(i=1;i<NUM_PATTERNS+1;i++) {
+        patternOffset[i] = offset;
+        offset = patternOffset[i] + patternRows[i];
+    }
 }
 
 action timing {
@@ -881,6 +975,7 @@ ${{
 
 action start {
     when(wasmReady) {
+        do :project > makepattern;
         do :project > makeui;
         do :project > initUIevents;
         do :project > setuplisteners;
@@ -920,6 +1015,7 @@ action ACTIVE {
     current_instrument = 1;
 
     patternDirty = false;
+    sampleDirty = true;
     wasmReady = false;
 
     is_playing is false;

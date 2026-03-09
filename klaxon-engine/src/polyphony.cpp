@@ -46,7 +46,7 @@ void Polyphony::add_voice(int channel_id, int note_id, int instrument_id, float 
     voices[i].rate = powf(2, static_cast<float>(note_id - root_note)/12);
     voices[i].active = true;
     voices[i].finished = false;
-    voices[i].volume = volume;
+    voices[i].volume = static_cast<float>(volume)/100;
     voices[i].position = 0;
 
     curr++;

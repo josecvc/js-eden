@@ -3,10 +3,10 @@ const importObject = {
         memory: new WebAssembly.Memory({
                     initial: 256,
                     maximum: 256,
-                    shared: true
+                    shared: false
                 }),
         table: new WebAssembly.Table({ initial: 0, element: "anyfunc" }),
-        abort: () => { throw new Error("WASM abort"); }
+        abort: () => { throw new Error("WASM abort"); },
     }
 };
 
@@ -26,19 +26,30 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.stopMidi(msg);
             } else if (msg.type == "bpm") {
                 this.setBPM(msg);
-            } else if (msg.type == "rows-per-beat") {
-                this.setRPB(msg);
+            } else if (msg.type == "speed") {
+                this.setSpeed(msg);
             } else if (msg.type == "playstart") {
                 this.setPlay(msg);
             } else if (msg.type == "playpause") {
                 this.setPause(msg);
-            }
+            } else if (msg.type == "note_set") {
+                this.emplaceNote(msg);
+            } else if (msg.type == "instr_set") {
+                this.emplaceInstr(msg);
+            } else if (msg.type == "vol_set") {
+                this.emplaceVol(msg);
+            } else if (msg.type == "effect_set") {
+                this.emplaceEffect(msg);
+            } else if (msg.type == "param_set") {
+                this.emplaceParam(msg);
+            } 
         };
-        this.patterns = {};
     }
 
     initProcessor(msg) {
-        WebAssembly.instantiate(msg.wasm, importObject)
+        WebAssembly.compile(msg.wasm)
+        .then((module) => {
+            WebAssembly.instantiate(msg.wasm, importObject)
             .then((obj) => {
                 this.wasm = obj.instance
                 
@@ -48,7 +59,7 @@ class MixerProcessor extends AudioWorkletProcessor {
 
                 const frames = 128;
                 const channels = 2; // stereo audio
-                const bytes = frames * 4;
+                const bytes = frames * Float32Array.BYTES_PER_ELEMENT;
 
                 this.enginePtr = this.wasm.exports.create_engine(msg.sample_rate, msg.bpm, msg.rows_per_beat);
 
@@ -71,91 +82,20 @@ class MixerProcessor extends AudioWorkletProcessor {
 
                 this.HEAPU32[(this.outputTablePtr >> 2) + 0] = this.leftPtr;
                 this.HEAPU32[(this.outputTablePtr >> 2) + 1] = this.rightPtr;
-                
-                // create data views for WebAssembly and JS
-                const BYTES_PER_CELL = 5;
-                const totalCells = msg.numPatterns * msg.numRows * msg.numChannels;
-                const totalPatternBytes = totalCells * BYTES_PER_CELL;
 
-                const rowBytes = msg.numPatterns * Uint16Array.BYTES_PER_ELEMENT;
-                const offsetBytes = msg.numPatterns * Uint32Array.BYTES_PER_ELEMENT;
-                const orderBytes = 255 * Uint8Array.BYTES_PER_ELEMENT;
-                const playbackBytes = 3 * Uint16Array.BYTES_PER_ELEMENT;
-                
-
-                this.patternPtr = this.wasm.exports.malloc(totalPatternBytes);
-                this.patternArray = new Uint8Array(
-                    this.wasm.exports.memory.buffer, 
-                    this.patternPtr, 
-                    totalCells
-                );
-
-                this.rowPtr = this.wasm.exports.malloc(
-                    msg.numPatterns * Uint16Array.BYTES_PER_ELEMENT
-                );
-
-                this.rowArray = new Uint16Array(
-                    this.wasm.exports.memory.buffer, 
-                    this.rowPtr, 
-                    msg.numPatterns
-                );
-  
-                this.offsetPtr = this.wasm.exports.malloc(
-                    msg.numPatterns * Uint32Array.BYTES_PER_ELEMENT
-                );
-                this.offsetArray = new Uint32Array(
-                    this.wasm.exports.memory.buffer, 
-                    this.offsetPtr, 
-                    msg.numPatterns
-                );
-
-                this.orderPtr = this.wasm.exports.malloc(
-                    msg.numPatterns * Uint8Array.BYTES_PER_ELEMENT
-                );
-                this.orderArray = new Uint8Array(
-                    this.wasm.exports.memory.buffer, 
-                    this.orderPtr, 
-                    255
-                );
-
-                this.playbackPtr = this.wasm.exports.malloc(
-                    3 * Uint16Array.BYTES_PER_ELEMENT
+                /*
+                void init_engine(
+                    Engine* engine, 
+                    int sample_rate, 
+                    int bpm, 
+                    int ticks_per_row,
                 )
-                this.playbackArray = new Uint16Array(
-                    this.wasm.exports.memory.buffer, 
-                    this.playbackPtr, 
-                    3
-                );
-                
-                // init patterns with 64 rows
-                for(let p = 0; p < msg.numPatterns; p++) {
-                    this.rowArray[p] = msg.numRows;
-                }
-                console.log(this.rowArray);
-
-                let offset = 0;
-
-                for(let p = 0; p < msg.numPatterns; p++) {
-                    this.offsetArray[p] = offset;
-                    offset += this.rowArray[p] * msg.numChannels;
-                }
-
+                */
                 this.wasm.exports.init_engine(
                     this.enginePtr,
                     msg.sampleRate, 
                     msg.bpm, 
                     msg.ticksPerRow,
-
-                    this.patternPtr,
-                    this.rowPtr,
-                    this.offsetPtr,
-                    this.orderPtr,
-                    this.playbackPtr,
-
-                    msg.numPatterns,
-                    msg.numChannels,
-                    totalCells,
-                    1 // start with one order
                 );
 
                 this.sampleRate = msg.sampleRate;
@@ -168,23 +108,8 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.b = 0;
 
                 this.samplePool = [];
-
-                this.port.postMessage({
-                    type: "shared",
-                    mem: this.wasm.exports.memory.buffer,
-                    patternPtr: this.patternPtr,
-                    patternLength: this.patternArray.length,
-                    rowPtr: this.rowPtr,
-                    rowLength: this.rowArray.length,
-                    offsetPtr: this.offsetPtr,
-                    offsetLength: this.offsetArray.length,
-                    orderPtr: this.orderPtr,
-                    orderLength: this.orderArray.length,
-                    playbackPtr: this.playbackPtr,
-                    playbackLength: this.playbackArray.length,
-                })
             })
-            .catch((e) => {
+        }).catch((e) => {
                 console.log("Error: Failed to instantiate WebAssembly module.\n" + e);
             })
     }
@@ -232,27 +157,38 @@ class MixerProcessor extends AudioWorkletProcessor {
 
         console.log(res);
 
-        this.samplePool.push(
-            {
-                leftPtr: lAudioPtr,
-                rightPtr: rAudioPtr,
-                sampleRate: msg.sampleRate,
-                channels: msg.channels,
-                length: msg.duration
-            }
-        )
-
         this.port.postMessage({
             type: "sample",
+            id: msg.id,
             filename: msg.filename,
             leftPtr: lAudioPtr,
             rightPtr: rAudioPtr,
             sampleRate: msg.sampleRate,
             channels: msg.channels,
-            length: msg.duration,
+            length: msg.duration
         })
 
         this.wasm.exports.free(stringPtr);
+    }
+
+    emplaceNote(msg) {
+        this.wasm.exports.set_note(this.enginePtr, msg.id, msg.calcIndex);
+    }
+
+    emplaceInstr(msg) {
+        this.wasm.exports.set_instrument(this.enginePtr, msg.id, msg.calcIndex);
+    }
+
+    emplaceVol(msg) {
+        this.wasm.exports.set_volume(this.enginePtr, msg.id, msg.calcIndex);
+    }
+    
+    emplaceEffect(msg) {
+        this.wasm.exports.set_effect(this.enginePtr, msg.id, msg.calcIndex);
+    }
+    
+    emplaceParam(msg) {
+        this.wasm.exports.set_param(this.enginePtr, msg.id, msg.calcIndex);
     }
 
     playMidi(msg) {
@@ -266,11 +202,11 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     setBPM(msg) {
-        this.wasm.exports.set_bpm(msg.value);
+        this.wasm.exports.set_tempo(this.enginePtr, msg.value);
     }
 
-    setRPB(msg) {
-        this.wasm.exports.set_rpb(msg.value);
+    setSpeed(msg) {
+        this.wasm.exports.set_ticks_per_row(this.enginePtr, msg.value);
     }
 
     setPlay(msg) {
@@ -279,7 +215,7 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     setPause(msg) {
-
+        this.wasm.exports.stop_track(this.enginePtr);
     }
 
     process(ins, outs, parameters) {
@@ -290,8 +226,8 @@ class MixerProcessor extends AudioWorkletProcessor {
         // int process(Engine* engine, float* output, int length)
         const beat = this.wasm.exports.process(this.enginePtr, this.outputTablePtr, n);
         const voices = this.wasm.exports.get_num_voices(this.enginePtr);
-        const curr_row = this.wasm.exports.get_current_row(this.enginePtr);
-        
+        const tempo = this.wasm.exports.get_bpm(this.enginePtr);
+
         if(voices >= 1) {
             console.log(voices + " voice(s)");
         }

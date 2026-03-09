@@ -3,14 +3,13 @@
 
 #include <vector>
 #include <memory>
-#include <atomic>
 #include <variant>
 
 #include "instrument.h"
 #include "pattern.h"
 #include "polyphony.h"
 
-using Instrument = std::variant<SynthInstrument, SampleInstrument>;
+using Instrument = std::variant<std::monostate, SynthInstrument, SampleInstrument>;
 
 class Engine
 {
@@ -26,16 +25,7 @@ public:
     void init(
         int sample_rate, 
         int bpm, 
-        int ticks_per_row,
-        uint8_t* patterns,
-        uint16_t* pattern_rows,
-        uint32_t* pattern_offset,
-        uint8_t* pattern_order,
-        uint16_t* playback,
-        int num_patterns,
-        int num_channels,
-        int num_cells,
-        int num_orders
+        int ticks_per_row
     );
 
     // playback
@@ -57,7 +47,7 @@ public:
     void set_ticks_per_row(int ticks_per_row);
     
     // instruments
-    void register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    int register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
     void add_synth();
     void remove_instrument(int instrument_id);
 
@@ -69,13 +59,14 @@ public:
 
     // playback state
     bool is_playing{false};
+
     double current_samples;
     int current_ticks;
     short current_row;
     short current_order;
     short current_pattern;
 
-    std::atomic<uint16_t>* playback;
+    uint16_t* playback;
 
     int instrument_count{0}; // use this to switch to Instrument[MAX_INSTRUMENTS]
     

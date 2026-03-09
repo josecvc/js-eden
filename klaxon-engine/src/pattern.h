@@ -5,6 +5,8 @@
 
 constexpr int MAX_ROWS = 64;
 constexpr int MAX_CHANNELS = 8;
+constexpr int MAX_PATTERNS = 255;
+constexpr int MAX_ORDER = 127;
 
 struct Cell {
     uint8_t noteId;
@@ -17,9 +19,9 @@ struct Cell {
 struct PatternInfo {
     Cell* cells;
 
-    uint16_t* pattern_rows;
-    uint32_t* pattern_offset;
-    uint8_t*  pattern_order;
+    uint16_t pattern_rows[MAX_PATTERNS];
+    uint32_t pattern_offset[MAX_PATTERNS];
+    uint8_t  pattern_order[MAX_ORDER];
 
     int num_patterns;
     int num_channels;

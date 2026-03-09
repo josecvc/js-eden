@@ -1,18 +1,10 @@
 #include "engine.h"
+#include "pattern.h"
 
 void Engine::init(
         int sample_rate, 
         int bpm, 
-        int ticks_per_row,
-        uint8_t* patterns,
-        uint16_t* pattern_rows,
-        uint32_t* pattern_offset,
-        uint8_t* pattern_order,
-        uint16_t* playback,
-        int num_patterns,
-        int num_channels,
-        int num_cells,
-        int num_orders
+        int ticks_per_row
     )
 {
     this->sample_rate = sample_rate;
@@ -22,13 +14,30 @@ void Engine::init(
         
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.f  / (bpm * 24); // 24 ticks per minute tempo base
 
-    // Init pattern pointers
-    this->pattern_info.cells = reinterpret_cast<Cell*>(patterns);
-    this->pattern_info.pattern_rows = pattern_rows;
-    this->pattern_info.pattern_offset = pattern_offset;
-    this-> pattern_info.pattern_order = pattern_order;
-    this->pattern_info.num_orders = num_orders;
-    this->playback = reinterpret_cast<std::atomic<uint16_t>*>(playback);
+    this->pattern_info.cells = reinterpret_cast<Cell*>(new uint8_t[MAX_PATTERNS * MAX_ROWS * MAX_CHANNELS * 5]);
+
+    for(int i = 0; i < MAX_ORDER;i++)
+    {
+        this->pattern_info.pattern_order[i] = 0;
+    }
+
+    for(int i = 0; i < MAX_PATTERNS; i++)
+    {
+        this->pattern_info.pattern_rows[i] = 64;
+    }
+
+    int offset = 0;
+
+    for(int i = 0; i < MAX_PATTERNS; i++) 
+    {
+        this->pattern_info.pattern_offset[i] = offset;
+        offset = this->pattern_info.pattern_offset[i] + this->pattern_info.pattern_rows[i];
+    }
+
+    this->pattern_info.num_cells = MAX_PATTERNS * MAX_ROWS * MAX_CHANNELS * 5;
+    this->pattern_info.num_patterns = MAX_PATTERNS;
+    this->pattern_info.num_orders = 1;
+    this->pattern_info.num_channels = MAX_CHANNELS;
 
     this->current_samples = 0;
     this->current_ticks = 0;
@@ -60,7 +69,7 @@ void Engine::mix_instruments(float** output, int frames)
 {
     // render each voice that is active
 
-    if(poly.get_current_voices() == 0 || instruments.size() == 0) return; // edge case, without this you get null calls
+    if(poly.get_current_voices() == 0 || instrument_count == 0) return; // edge case, without this you get null calls
 
     for(int v = 0; v < poly.MAX_VOICES; v++) 
     {
@@ -69,9 +78,21 @@ void Engine::mix_instruments(float** output, int frames)
         if(!poly.voices[v].active) continue;
         
         std::visit([&](auto& i) {
-            i.render(output, frames, poly.voices[v]);
+            using T = std::decay_t<decltype(i)>;
+
+            if constexpr (std::is_same_v<T, SampleInstrument>) {
+                int note_id = poly.voices[v].note_id;
+                int sample_id = i.note_sample[note_id];
+
+                if (sample_id < 0 || sample_id >= sample_pool.size()) return;
+
+                const auto& sample = sample_pool[sample_id].get();
+                i.render(output, frames, poly.voices[v], sample);
+            } else if constexpr (std::is_same_v<T, SynthInstrument>) {
+                // Synth generates its own waveform
+                i.render(output, frames, poly.voices[v]);
+            }
         }, instruments[poly.voices[v].instrument_id]);
-        
     }
 }
 
@@ -110,8 +131,6 @@ int Engine::step(int frames)
 void Engine::process_row()
 {
     // find which row to process based on current_row, current_pattern
-
-    this->playback[ROW].store(current_row, std::memory_order_relaxed);
     int pat = pattern_info.pattern_offset[current_pattern];
 
     int rowStart = pat + current_row * pattern_info.num_channels;
@@ -122,7 +141,7 @@ void Engine::process_row()
         int idx = rowStart + ch;
         Cell& cell = pattern_info.cells[idx];
 
-        if(cell.instrumentId > instruments.size() || cell.noteId < 12 || cell.noteId > 119 || cell.instrumentId < 1) continue;
+        if(cell.instrumentId > instrument_count || cell.noteId < 12 || cell.noteId > 119 || cell.instrumentId < 1) continue;
 
         // channels are 1-indexed (MIDI is taking channel 0)
         // instruments are 1-indexed (0 means no instrument in cell)
@@ -140,15 +159,15 @@ void Engine::advance_row()
         if(++current_order >= pattern_info.num_orders) {
             is_playing = false;
             current_order = 0;
-            current_samples = 0;            
+            current_samples = 0;
+            
+            for(int i=0; i < Polyphony::MAX_VOICES; i++) {
+                poly.remove_voice(poly.voices[i].channel_id, poly.voices[i].note_id, poly.voices[i].instrument_id);
+            }
         }
         
         current_pattern = pattern_info.pattern_order[current_order];
     }
-
-    // store in shared memory
-    this->playback[PATTERN].store(current_pattern, std::memory_order_relaxed);
-    this->playback[ORDER].store(current_order, std::memory_order_relaxed);
 }
 
 void Engine::play(int order_num, int row_num)
@@ -174,13 +193,22 @@ void Engine::pause()
 void Engine::stop()
 {
     current_samples = 0;
+    current_row = 0;
+    current_pattern = 0;
+    current_order = 0;
+    current_ticks = 0;
+
+    for(int i=0; i < Polyphony::MAX_VOICES; i++) {
+        poly.remove_voice(poly.voices[i].channel_id, poly.voices[i].note_id, poly.voices[i].instrument_id);
+    }
+
     is_playing = false;
 }
 
 void Engine::set_bpm(int bpm)
 {
     this->bpm = bpm;
-    this->samples_per_tick = static_cast<float>(sample_rate) * 60.0  / 24 / bpm;
+    this->samples_per_tick = static_cast<float>(sample_rate) * 60.0f  / 24 / bpm;
 }
 
 void Engine::set_sample_rate(int sample_rate)
@@ -195,20 +223,61 @@ void Engine::set_ticks_per_row(int ticks_per_row)
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.0  / 24 / bpm;
 }
 
-void Engine::add_synth()
+int Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
 {
-    instruments.push_back(SynthInstrument());
-}
+    auto sample = std::make_shared<Sample>();
+    sample->load_sample(filename, left, right, sample_rate, length);
 
-void Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
-{
-    instruments.push_back(SampleInstrument(filename, left, right, sample_rate, length));
+    sample_pool.push_back(sample);
+
+    int sample_id = sample_pool.size() - 1;
+
+    int id = 0;
+
+    for (int i = 0; i < MAX_INSTRUMENTS; i++)
+    {
+        if (std::holds_alternative<std::monostate>(instruments[i]))
+        {
+            instruments[i] = SampleInstrument();
+            instrument_count++;
+            id = i;
+            break;
+        }
+    }
+
+    auto& inst = instruments[id];
+
+    if (auto sample_inst = std::get_if<SampleInstrument>(&inst))
+    {
+        for (int n = 0; n < SampleInstrument::MAX_NOTES; n++)
+        {
+            sample_inst->note_sample[n] = sample_id;
+        }
+    }
+
+    return id;
 }
 
 void Engine::remove_instrument(int instrument_id)
 {
-    if(instrument_id >= 0 && instrument_id < MAX_INSTRUMENTS)
-        instruments.erase(instruments.begin() + instrument_id);
+    if(instrument_id < 0 && instrument_id >= MAX_INSTRUMENTS)
+        return;
+
+    auto& inst = instruments[instrument_id];
+
+    if (auto sampleInst = std::get_if<SampleInstrument>(&inst))
+    {
+        for (int note = 0; note < SampleInstrument::MAX_NOTES; note++)
+        {
+            if (sampleInst->note_sample[note] == instrument_id)
+            {
+                sampleInst->note_sample[note] = -1;
+            }
+        }
+    }
+
+    inst = std::monostate{};
+    instrument_count--;
 }
 
 /**
@@ -221,24 +290,10 @@ extern "C"
         return new Engine();
     }
 
-    void init_engine(
-        Engine* engine, 
-        int sample_rate, 
-        int bpm, 
-        int ticks_per_row,
-        uint8_t* patterns,
-        uint16_t* pattern_rows,
-        uint32_t* pattern_offset,
-        uint8_t* pattern_order,
-        uint16_t* playback,
-        int num_patterns,
-        int num_channels,
-        int num_cells,
-        int num_orders
-    )
+    void init_engine(Engine* engine, int sample_rate, int bpm, int ticks_per_row)
     {
         if(!engine) return;
-        engine->init(sample_rate, bpm, ticks_per_row, patterns, pattern_rows, pattern_offset, pattern_order,playback, num_patterns, num_channels, num_cells, num_orders);
+        engine->init(sample_rate, bpm, ticks_per_row);
     }
 
     bool destroy_engine(Engine* engine)
@@ -272,7 +327,7 @@ extern "C"
         engine->stop();
     }
 
-    void set_bpm(Engine* engine, int bpm)
+    void set_tempo(Engine* engine, int bpm)
     {
         if (!engine) return;
         engine->set_bpm(bpm);
@@ -293,9 +348,7 @@ extern "C"
     int register_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
     {
         if (!engine) return -1;
-        engine->register_sample(filename, left, right, sample_rate, length);
-
-        return 0;
+        return engine->register_sample(filename, left, right, sample_rate, length);
     }
 
     void remove_instrument(Engine* engine, int instrument_id)
@@ -307,7 +360,7 @@ extern "C"
     int play_from_midi(Engine* engine, int instrument_id, int note_id)
     {
         if (!engine) return -2;
-        if(instrument_id > engine->instruments.size() || instrument_id < 1) return -1;
+        if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
         engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
 
         return 0;
@@ -316,7 +369,7 @@ extern "C"
     int stop_from_midi(Engine* engine, int instrument_id, int note_id)
     {
         if (!engine) return -2;
-        if(instrument_id > engine->instruments.size() || instrument_id < 1) return -1;
+        if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
         // engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
 
         return 0;
@@ -348,11 +401,85 @@ extern "C"
         return engine->pattern_info.cells[
             engine->pattern_info.pattern_offset[pattern_id] + row_id * engine->pattern_info.num_channels + channel_id].noteId;
     }
+
+    int get_num_patterns(Engine* engine)
+    {
+        if (!engine) return -2;
+
+        return engine->pattern_info.num_patterns;
+    }
+
+    int get_pattern_offset(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
+
+
+        return engine->pattern_info.pattern_offset[pattern_id];
+    }
     
     int get_current_row(Engine* engine)
     {
         if (!engine) return -2;
         return engine->current_row;
+    }
+
+    int get_first_cell(Engine* engine)
+    {
+        if (!engine) return -2;
+
+        return engine->pattern_info.cells[0].instrumentId;
+    }
+
+    int set_note(Engine* engine, int noteId, int index)
+    {
+        if (!engine) return -2;
+
+        engine->pattern_info.cells[index].noteId = static_cast<uint8_t>(noteId);
+
+        return 0;
+    }
+
+    int set_instrument(Engine* engine, int instrumentId, int index)
+    {
+        if (!engine) return -2;
+
+        engine->pattern_info.cells[index].instrumentId = static_cast<uint8_t>(instrumentId);
+
+        return 0;
+    }
+
+    int set_volume(Engine* engine, int volume, int index)
+    {
+        if (!engine) return -2;
+
+        engine->pattern_info.cells[index].volume = static_cast<uint8_t>(volume);
+
+        return 0;
+    }
+
+    int set_effect(Engine* engine, int effect, int index)
+    {
+        if (!engine) return -2;
+
+        engine->pattern_info.cells[index].effect = static_cast<uint8_t>(effect);
+
+        return 0;
+    }
+
+    int set_param(Engine* engine, int param, int index)
+    {
+        if (!engine) return -2;
+
+        engine->pattern_info.cells[index].param = static_cast<uint8_t>(param);
+
+        return 0;
+    }
+
+    int get_bpm(Engine* engine) {
+        if (!engine) return -2;
+
+        return engine->bpm;
     }
 
     //TODO: Finish WebAssembly functions
