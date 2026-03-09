@@ -711,8 +711,11 @@ action initUIevents {
     mouseHoverRow is floor((mouseY - gridOffset[2])/cellHeight);
     mouseHoverChannel is floor((mouseX - gridOffset[1])/cellWidth);
 
-    mouseHoverInstrument is floor((mouseY - 2*fontSize + orderOffset[2])/fontSize);
+    mouseHoverInstrumentSampleList is floor((mouseY - 2*fontSize + orderOffset[2])/fontSize);
 
+    mouseOverInstrument is (mouseHoverInstrumentSampleList >= 1 && mouseHoverInstrumentSampleList <= 127 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4 && mouseY < view_PatternEditor_height/4);
+
+    mouseOverSample is (mouseHoverInstrumentSampleList >= 1 && mouseHoverInstrumentSampleList <= 127 && mouseX >= 3 * view_PatternEditor_width/4 && mouseX <= view_PatternEditor_width && mouseY < view_PatternEditor_height/4);
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
