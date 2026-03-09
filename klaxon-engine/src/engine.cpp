@@ -207,7 +207,7 @@ void Engine::register_sample(const char* filename, float* left, float* right, in
 
 void Engine::remove_instrument(int instrument_id)
 {
-    if(instrument_id >= 0 && instrument_id < instruments.size())
+    if(instrument_id >= 0 && instrument_id < MAX_INSTRUMENTS)
         instruments.erase(instruments.begin() + instrument_id);
 }
 

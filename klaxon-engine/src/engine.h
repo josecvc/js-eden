@@ -15,7 +15,7 @@ using Instrument = std::variant<SynthInstrument, SampleInstrument>;
 class Engine
 {
 public:
-    static constexpr int MAX_INSTRUMENTS = 32;
+    static constexpr int MAX_INSTRUMENTS = 128;
     static constexpr int ROW = 0;
     static constexpr int PATTERN = 1;
     static constexpr int ORDER = 2;
@@ -77,12 +77,12 @@ public:
 
     std::atomic<uint16_t>* playback;
 
-    int instrument_count; // use this to switch to Instrument[MAX_INSTRUMENTS]
+    int instrument_count{0}; // use this to switch to Instrument[MAX_INSTRUMENTS]
     
     // Pattern information
     PatternInfo pattern_info;
 
-    std::vector<Instrument> instruments;
+    Instrument instruments[MAX_INSTRUMENTS];
     std::vector<std::shared_ptr<Sample>> sample_pool;
 
     Polyphony poly;
@@ -90,39 +90,4 @@ public:
     
 };
 
-/*
-
-JS:
-const sampleLeftPtr = this.wasm.exports.malloc(msg.length * Float32.BYTES_PER_ELEMENT);
-const sampleRightPtr = this.wasm.exports.malloc(msg.length * Float32.BYTES_PER_ELEMENT);
-const sampleLeftArray = new Float32Array(
-    this.wasm.exports.memory.buffer,
-    sampleLeftPtr,
-    msg.length
-);
-
-const sampleRightArray = new Float32Array(
-    this.wasm.exports.memory.buffer,
-    sampleRightPtr,
-    msg.length
-);
-
-this.wasm.exports.register_sample(this.enginePtr, sampleLeftPtr, sampleRightPtr, msg.filename, msg.sample_rate, msg.length, msg.numChannels);
-
-this.samples.push_back([sampleLeftPtr, sampleRightPtr, sampleLeftArray, sampleRightArray, msg.filename, msg.length, msg.numChannels]); // unlikely to be like this
-
-C++:
-
-void register_sample(Engine* engine, float* left, right, const char* filename, int sample_rate, uint64_t length, int channels)
-{
-    if (!engine) return -2;
-    if(!left || !right) return -1;
-
-    std::shared_ptr<Sample> smp = std::make_shared<Sample>();
-    smp->load_sample(filename, left, right, sample_rate, length))
-
-    engine->sample_pool.push_back(smp)
-}
-
-*/
 #endif

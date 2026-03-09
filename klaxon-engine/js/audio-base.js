@@ -189,11 +189,8 @@ class MixerProcessor extends AudioWorkletProcessor {
             })
     }
 
-    stringToCharPointer(str) {
+    stringToCharPointer(encoded) {
         // need null terminator too
-        const encoder = new TextEncoder();
-        const encoded = encoder.encode(str);
-
         const stringPtr = this.wasm.exports.malloc((encoded.length + 1) * Int8Array.BYTES_PER_ELEMENT);
 
         const stringHeap = new Int8Array(
@@ -228,24 +225,32 @@ class MixerProcessor extends AudioWorkletProcessor {
         lAudioHeap.set(msg.data[0]);
         rAudioHeap.set(msg.data[1]);
 
-        const stringPtr = this.stringToCharPointer(msg.filename);
+        const stringPtr = this.stringToCharPointer(msg.encoded);
 
         // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate)
         const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate);
 
         console.log(res);
 
-        this.sample_pool.push(
+        this.samplePool.push(
             {
                 leftPtr: lAudioPtr,
                 rightPtr: rAudioPtr,
-                leftHeap: lAudioHeap,
-                rightHeap: rAudioHeap,
                 sampleRate: msg.sampleRate,
                 channels: msg.channels,
                 length: msg.duration
             }
         )
+
+        this.port.postMessage({
+            type: "sample",
+            filename: msg.filename,
+            leftPtr: lAudioPtr,
+            rightPtr: rAudioPtr,
+            sampleRate: msg.sampleRate,
+            channels: msg.channels,
+            length: msg.duration,
+        })
 
         this.wasm.exports.free(stringPtr);
     }

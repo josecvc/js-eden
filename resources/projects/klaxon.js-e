@@ -38,6 +38,7 @@ patternOrder = null;
 playbackArray = null;
 
 wasmMemory = null;
+samplePool = [];
 
 ${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
@@ -63,30 +64,50 @@ ${{
                     })
 
                 node.port.onmessage = (e) => {
-                    root.lookup("wasmMemory").assign(
-                        e.data.mem, root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                    if(e.data.type == "shared") {
+                        root.lookup("wasmMemory").assign(
+                            e.data.mem, root.scope, Eden.EdenSymbol.defaultAgent
+                        );
 
-                    root.lookup("patternArray").assign(
-                        new Uint8Array(e.data.mem, e.data.patternPtr, e.data.patternLength), root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                        root.lookup("patternArray").assign(
+                            new Uint8Array(e.data.mem, e.data.patternPtr, e.data.patternLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        );
 
-                    root.lookup("patternRows").assign(
-                        new Uint16Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                        root.lookup("patternRows").assign(
+                            new Uint16Array(e.data.mem, e.data.rowPtr, e.data.rowLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        );
 
-                    root.lookup("patternOffset").assign(
-                        new Uint32Array(e.data.mem, e.data.offsetPtr, e.data.offsetLength), root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                        root.lookup("patternOffset").assign(
+                            new Uint32Array(e.data.mem, e.data.offsetPtr, e.data.offsetLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        );
 
-                    root.lookup("patternOrder").assign(
-                        new Uint8Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                        root.lookup("patternOrder").assign(
+                            new Uint8Array(e.data.mem, e.data.orderPtr, e.data.orderLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        );
 
-                    root.lookup("playbackArray").assign(
-                        new Uint16Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
-                    );
+                        root.lookup("playbackArray").assign(
+                            new Uint16Array(e.data.mem, e.data.playbackPtr, e.data.playbackLength), root.scope, Eden.EdenSymbol.defaultAgent
+                        );
+                    } else if (e.data.type == "sample") {
+                        root.lookup("samplePool").value().push(
+                            {
+                                filename: e.data.filename,
+                                leftPtr: e.data.leftPtr,
+                                rightPtr: e.data.rightPtr,
+                                leftHeap: e.data.leftHeap,
+                                rightHeap: e.data.leftHeap,
+                                sampleRate: e.data.sampleRate,
+                                channels: e.data.channels,
+                                length: e.data.duration,
+                            }
+                        )
+                    }  
                 }
+
+                
+                }).then((res) => {
+                    setTimeout(()=>{ root.lookup("wasmReady").assign(true, root.scope)}, 1000);
+                   
                 }).catch((e) => console.log("Error: Failed to post message to AudioWorkerNode\n" + e));
             } else {
                 throw new Error(res.status);
@@ -238,10 +259,12 @@ func addSample {
             } else {
                 throw new Error("Maximum 2 channels per sample.");
             }
-
+            
+            const encoder = new TextEncoder();
             root.lookup("engine_node").value().port.postMessage({
                type: "sample",
                filename: file.name,
+               encoded: encoder.encode(file.name),
                numberOfChannels: data.numberOfChannels,
                sampleRate: data.sampleRate,
                duration: data.length,
@@ -495,7 +518,7 @@ func getPattern {
                 const volume =   patterns[idx+2];
                 const effectId = patterns[idx+3];
                 const param =    patterns[idx+4];
-                console.log(noteId);
+
                 row.push([
                     noteId,
                     instrId,
@@ -569,24 +592,27 @@ buttonSize is 30 * scale;
 cellWidth is view_PatternEditor_width/6 * scale;
 cellHeight is view_PatternEditor_height/24 * scale;
 
-gridOffset  is [40, 3 * view_PatternEditor_height / 4 - currentRow*cellHeight]
+gridOffset  is [40, view_PatternEditor_height/1.7 - currentRow*cellHeight]
 orderOffset is [view_PatternEditor_width/50,  view_PatternEditor_height / 16 - (currentOrder+1)*fontSize + 7]
 
 # Covers
-topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/2, "#625353", "#000000"); # add gradient afterwards
-bottomCover is Rectangle(0, view_PatternEditor_height/2, view_PatternEditor_width, view_PatternEditor_height/2, "#74747400", "#000000");
-channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/2 , cellWidth, view_PatternEditor_height/2, "#00000000", "#000000") with ch is 0..(numChannels - 1);
+topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/4, "#625353", "#000000"); # add gradient afterwards
+bottomCover is Rectangle(0, view_PatternEditor_height/4, view_PatternEditor_width, 3*view_PatternEditor_height/4, "#74747400", "#000000");
+channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/4 , cellWidth, 3*view_PatternEditor_height/4, "#00000000", "#000000") with ch is 0..(numChannels - 1);
 
-instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/2, view_PatternEditor_height/4, "#784545", "#000000");
-samplesBg is Rectangle(view_PatternEditor_width/2, view_PatternEditor_height/4, view_PatternEditor_width/2, view_PatternEditor_height/4, "#784545", "#000000");
+instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
+samplesBg is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
 
 orderBackground is Rectangle(0, 0, view_PatternEditor_width/8, view_PatternEditor_height/8, "#784545", "#000000");
 orderSeqSep is Rectangle(0, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
 orderPatSep is Rectangle(view_PatternEditor_width/16, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
 
+instrSep is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
+sampSep is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
+
 # Buttons
-playButton is Button("playbtn", "Play", 0, view_PatternEditor_height/4, buttonSize * 4, buttonSize * 2);
-stopButton is Button("stopbtn", "Stop", 0, view_PatternEditor_height/4 + buttonSize * 2, buttonSize * 4, buttonSize * 2);
+playButton is Button("playbtn", "Play", 0, view_PatternEditor_height/8 + buttonSize, buttonSize * 4, buttonSize * 1.5);
+stopButton is Button("stopbtn", "Stop", 0, view_PatternEditor_height/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
 tempoPlusButton is Button("tempoplus",   "+", view_PatternEditor_width/4.5, view_PatternEditor_height/15      , buttonSize, buttonSize);
 tempoMinusButton is Button("tempominus", "-", view_PatternEditor_width/4.5 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
@@ -600,18 +626,25 @@ patternMinusButton is Button("patternminus", "-", view_PatternEditor_width/2.75 
 orderInsertButton is Button("orderinsert", "Ins.", 0, view_PatternEditor_height/8, buttonSize*2, buttonSize);
 orderDelButton is Button("orderdelete", "Del.", buttonSize*2, view_PatternEditor_height/8, buttonSize*2, buttonSize);
 
-sampleLoadButton is Button("sampleload", "Load", view_PatternEditor_width/2 + fontSize*4, view_PatternEditor_height/4, buttonSize*2, buttonSize);
-sampleClearButton is Button("sampleclear", "Clear", view_PatternEditor_width/2 + buttonSize*2 + fontSize*4, view_PatternEditor_height/4, buttonSize*2, buttonSize);
+sampleLoadButton is Button("sampleload", "Load", 3*view_PatternEditor_width/4 + fontSize*4, 0, buttonSize*2, buttonSize);
+sampleClearButton is Button("sampleclear", "Clear", 3*view_PatternEditor_width/4 + buttonSize*2 + fontSize*4, 0, buttonSize*2, buttonSize);
+
+sampleEditButton is Button("sampleedit", "Smp Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
+
+instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
 buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton, 
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
-    orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton
+    orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton,
+    sampleEditButton, instrumentEditButton
 ];
 
+# Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
+
 # Information
-titleText is Text("KlaxonTracker", 3 * view_PatternEditor_width/16, 0, fontSize * 2, "white", "bold");
+titleText is Text("KlaxonTracker", 3 * view_PatternEditor_width/16, 0, fontSize * 2, "white", "bold", Object("css_class_list", "klaxon-heading"));
 instrIndicator is Text("Instruments", view_PatternEditor_width/2, 0, fontSize, "white");
-sampleIndicator is Text("Samples", view_PatternEditor_width/2, view_PatternEditor_height/4, fontSize, "white");
+sampleIndicator is Text("Samples", 3*view_PatternEditor_width/4, 0, fontSize, "white");
 
 tempoText is Text("BPM  " + bpm, view_PatternEditor_width/8, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
 speedText is Text("SPD  " + ticksPerRow, view_PatternEditor_width/8, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
@@ -630,13 +663,18 @@ patNum is Text(patClassifier, view_PatternEditor_width/16 + orderOffset[1], s*fo
 
 orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSeqSep];
 
-# Sample List Rendering
-sampleNum is Text(seqClassifier, 0 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..( - 1);
+# Instrument List Rendering
+instrNum is Text(s, view_PatternEditor_width/2, (s - 1)*fontSize + orderOffset[2], fontSize, "black" if s == current_instrument else "white") with s is 1..128;
 
-sampleListRender is [sampleNum]
+instrListRender is [instrumentsBg, instrNum, instrSep]
+
+# Sample List Rendering
+sampleNum is Text(s, 3 * view_PatternEditor_width/4, s*fontSize + orderOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+
+sampleListRender is [samplesBg, sampleNum, sampleSep]
 
 # Grid Rendering
-channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/2 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
+channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/4 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
 rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..63
 gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
 
@@ -659,7 +697,7 @@ gridBase is gridCell with x is 0..(numChannels - 1), y is 0..63;
 grid is [gridBase, rowNos, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect];
 
 # In render order
-editorCanvas is [bottomCover, grid, topCover, instrumentsBg, samplesBg, orderBg, orderRender, information, buttons];
+editorCanvas is [bottomCover, grid, topCover, orderRender, instrListRender, sampleListRender, information, buttons];
 }
 
 action initUIevents {
@@ -763,6 +801,7 @@ action initUIevents {
         patternFocus = getPattern(currentPattern - 1, numChannels);
     }
 
+    # button states
     when(patternplus_click) {
         if(patternplus_click && currentPattern < 255) {
             currentPattern++;
@@ -775,11 +814,9 @@ action initUIevents {
         }
     }
 
-
-    btn is Button("mybutton", "THIS", 0, 0);
-    when(mybutton_click) {
-        if(mybutton_click) {
-            x = 5;
+    when(sampleload_click) {
+        if(sampleload_click) {
+            createSample("smp");
         }
     }
 }
@@ -843,10 +880,12 @@ ${{
 }
 
 action start {
-    do :project > makeui;
-    do :project > initUIevents;
-    do :project > setuplisteners;
-    do :project > timing;
+    when(wasmReady) {
+        do :project > makeui;
+        do :project > initUIevents;
+        do :project > setuplisteners;
+        do :project > timing;
+    }
 }
 
 # NATIVE EVENT LISTENERS
@@ -881,7 +920,7 @@ action ACTIVE {
     current_instrument = 1;
 
     patternDirty = false;
-    ready = false;
+    wasmReady = false;
 
     is_playing is false;
     order = 0 with i is 1..255;
