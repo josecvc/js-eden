@@ -4,10 +4,13 @@
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <variant>
 
 #include "instrument.h"
 #include "pattern.h"
 #include "polyphony.h"
+
+using Instrument = std::variant<SynthInstrument, SampleInstrument>;
 
 class Engine
 {
@@ -54,7 +57,7 @@ public:
     void set_ticks_per_row(int ticks_per_row);
     
     // instruments
-    void add_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    void register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
     void add_synth();
     void remove_instrument(int instrument_id);
 
@@ -79,10 +82,47 @@ public:
     // Pattern information
     PatternInfo pattern_info;
 
-    std::vector<std::unique_ptr<Instrument>> instruments;
+    std::vector<Instrument> instruments;
+    std::vector<std::shared_ptr<Sample>> sample_pool;
+
     Polyphony poly;
     // Channel channels; maybe?? 
     
 };
 
+/*
+
+JS:
+const sampleLeftPtr = this.wasm.exports.malloc(msg.length * Float32.BYTES_PER_ELEMENT);
+const sampleRightPtr = this.wasm.exports.malloc(msg.length * Float32.BYTES_PER_ELEMENT);
+const sampleLeftArray = new Float32Array(
+    this.wasm.exports.memory.buffer,
+    sampleLeftPtr,
+    msg.length
+);
+
+const sampleRightArray = new Float32Array(
+    this.wasm.exports.memory.buffer,
+    sampleRightPtr,
+    msg.length
+);
+
+this.wasm.exports.register_sample(this.enginePtr, sampleLeftPtr, sampleRightPtr, msg.filename, msg.sample_rate, msg.length, msg.numChannels);
+
+this.samples.push_back([sampleLeftPtr, sampleRightPtr, sampleLeftArray, sampleRightArray, msg.filename, msg.length, msg.numChannels]); // unlikely to be like this
+
+C++:
+
+void register_sample(Engine* engine, float* left, right, const char* filename, int sample_rate, uint64_t length, int channels)
+{
+    if (!engine) return -2;
+    if(!left || !right) return -1;
+
+    std::shared_ptr<Sample> smp = std::make_shared<Sample>();
+    smp->load_sample(filename, left, right, sample_rate, length))
+
+    engine->sample_pool.push_back(smp)
+}
+
+*/
 #endif

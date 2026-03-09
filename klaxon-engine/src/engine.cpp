@@ -62,12 +62,16 @@ void Engine::mix_instruments(float** output, int frames)
 
     if(poly.get_current_voices() == 0 || instruments.size() == 0) return; // edge case, without this you get null calls
 
-    for(int v = 0; v < poly.MAX_VOICES; v++) {
+    for(int v = 0; v < poly.MAX_VOICES; v++) 
+    {
         if (poly.voices[v].finished)
             poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id, poly.voices[v].instrument_id);
         if(!poly.voices[v].active) continue;
         
-        instruments[poly.voices[v].instrument_id]->render(output, frames, poly.voices[v]);
+        std::visit([&](auto& i) {
+            i.render(output, frames, poly.voices[v]);
+        }, instruments[poly.voices[v].instrument_id]);
+        
     }
 }
 
@@ -136,9 +140,7 @@ void Engine::advance_row()
         if(++current_order >= pattern_info.num_orders) {
             is_playing = false;
             current_order = 0;
-            current_samples = 0;
-
-            
+            current_samples = 0;            
         }
         
         current_pattern = pattern_info.pattern_order[current_order];
@@ -195,16 +197,12 @@ void Engine::set_ticks_per_row(int ticks_per_row)
 
 void Engine::add_synth()
 {
-    std::unique_ptr<Instrument> instrument = std::make_unique<SynthInstrument>(SynthInstrument());
-
-    instruments.push_back(std::move(instrument));
+    instruments.push_back(SynthInstrument());
 }
 
-void Engine::add_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
+void Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
 {
-    std::unique_ptr<Instrument> instrument = std::make_unique<SampleInstrument>(SampleInstrument(filename, left, right, sample_rate, length));
-
-    instruments.push_back(std::move(instrument));
+    instruments.push_back(SampleInstrument(filename, left, right, sample_rate, length));
 }
 
 void Engine::remove_instrument(int instrument_id)
@@ -292,10 +290,10 @@ extern "C"
         engine->set_ticks_per_row(ticks_per_row);
     }
 
-    int add_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
+    int register_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
     {
         if (!engine) return -1;
-        engine->add_sample(filename, left, right, sample_rate, length);
+        engine->register_sample(filename, left, right, sample_rate, length);
 
         return 0;
     }

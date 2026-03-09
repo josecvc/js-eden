@@ -10,8 +10,8 @@ public:
     void load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
 
     // raw PCM
-    std::vector<float> left; 
-    std::vector<float> right;
+    float* left; 
+    float* right;
 
     const char* filename;
     int channels;

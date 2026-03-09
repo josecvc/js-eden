@@ -167,6 +167,8 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.patternNo = 0;
                 this.b = 0;
 
+                this.samplePool = [];
+
                 this.port.postMessage({
                     type: "shared",
                     mem: this.wasm.exports.memory.buffer,
@@ -187,13 +189,29 @@ class MixerProcessor extends AudioWorkletProcessor {
             })
     }
 
+    stringToCharPointer(str) {
+        // need null terminator too
+        const encoder = new TextEncoder();
+        const encoded = encoder.encode(str);
+
+        const stringPtr = this.wasm.exports.malloc((encoded.length + 1) * Int8Array.BYTES_PER_ELEMENT);
+
+        const stringHeap = new Int8Array(
+            this.wasm.exports.memory.buffer,
+            stringPtr,
+            encoded.length + 1
+        );
+
+        stringHeap.set(encoded); // these need to be int8_t
+        stringHeap[encoded.length] = 0; // null terminator
+        return stringPtr;
+    }
+
     addSample(msg) {
-        const bytes = msg.length * 4;
-        
         console.log(msg);
         // pointers and heaps to memory
-        const lAudioPtr = this.wasm.exports.malloc(msg.data[0].length * 4);
-        const rAudioPtr = this.wasm.exports.malloc(msg.data[0].length * 4);
+        const lAudioPtr = this.wasm.exports.malloc(msg.data[0].length * Float32Array.BYTES_PER_ELEMENT);
+        const rAudioPtr = this.wasm.exports.malloc(msg.data[0].length * Float32Array.BYTES_PER_ELEMENT);
 
         const lAudioHeap = new Float32Array(
             this.wasm.exports.memory.buffer,
@@ -210,13 +228,26 @@ class MixerProcessor extends AudioWorkletProcessor {
         lAudioHeap.set(msg.data[0]);
         rAudioHeap.set(msg.data[1]);
 
+        const stringPtr = this.stringToCharPointer(msg.filename);
+
         // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate)
-        const res = this.wasm.exports.add_sample(this.enginePtr, msg.filename, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate);
+        const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate);
+
         console.log(res);
 
-        this.wasm.exports.free(lAudioPtr);
-        this.wasm.exports.free(rAudioPtr);
+        this.sample_pool.push(
+            {
+                leftPtr: lAudioPtr,
+                rightPtr: rAudioPtr,
+                leftHeap: lAudioHeap,
+                rightHeap: rAudioHeap,
+                sampleRate: msg.sampleRate,
+                channels: msg.channels,
+                length: msg.duration
+            }
+        )
 
+        this.wasm.exports.free(stringPtr);
     }
 
     playMidi(msg) {
