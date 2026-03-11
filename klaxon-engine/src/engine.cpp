@@ -16,9 +16,11 @@ void Engine::init(
 
     this->pattern_info.cells = reinterpret_cast<Cell*>(new uint8_t[MAX_PATTERNS * MAX_ROWS * MAX_CHANNELS * 5]);
 
-    for(int i = 0; i < MAX_ORDER;i++)
+    this->pattern_info.pattern_order[0] = 0;
+
+    for(int i = 1; i < MAX_ORDER;i++)
     {
-        this->pattern_info.pattern_order[i] = 0;
+        this->pattern_info.pattern_order[i] = 255;
     }
 
     for(int i = 0; i < MAX_PATTERNS; i++)
@@ -133,7 +135,7 @@ void Engine::advance_tick()
         advance_row();
     }
 
-    // do any command effects in here
+
 }
 
 void Engine::process_row()
@@ -177,6 +179,7 @@ void Engine::advance_row()
 
 void Engine::process_effects(int row_tick)
 {
+    // do any command effects in here (probably with a switch case directing to effect methods)
     return;
 }
 

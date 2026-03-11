@@ -8,6 +8,11 @@ constexpr int MAX_CHANNELS = 8;
 constexpr int MAX_PATTERNS = 255;
 constexpr int MAX_ORDER = 127;
 
+struct Pattern {
+    Cell* cells;
+    int num_rows;
+};
+
 struct Cell {
     uint8_t noteId;
     uint8_t instrumentId;
@@ -28,6 +33,18 @@ struct PatternInfo {
     int num_cells;
     int num_orders; 
 };
+
+// struct PatternInfo {
+//     Pattern patterns[MAX_PATTERNS];
+
+//     uint16_t pattern_rows[MAX_PATTERNS];
+//     uint8_t  pattern_order[MAX_ORDER];
+
+//     int num_patterns;
+//     int num_channels;
+//     int num_cells;
+//     int num_orders; 
+// };
 
 struct ChannelData {
     uint8_t last_command;

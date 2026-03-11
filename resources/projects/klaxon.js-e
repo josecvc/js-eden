@@ -139,7 +139,7 @@ ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "note_on",
                 note: midiKey,
-                instrumentId: root.lookup("current_instrument").value()
+                instrumentId: root.lookup("currentInstrument").value()
             })
         }
 
@@ -201,7 +201,7 @@ ${{
                 root.lookup("engine_node").value().port.postMessage({
                 type: "note_off",
                 note: keyToNote[code] + (octave + 1) * 12,
-                instrumentId: root.lookup("current_instrument").value()
+                instrumentId: root.lookup("currentInstrument").value()
             })
             }
         }
@@ -476,95 +476,6 @@ ${{
     
 }}$
 
-# ORDER JS FUNCTIONS
-${{
-    // Order.prototype.getPattern = function(patternId) {
-    //     if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
-
-    //     return this.patterns[patternId]; 
-    // }
-
-    // Order.prototype.addPattern = function(pattern) {
-    //     this.patterns.push(pattern);
-    //     this.numPatterns++;
-    // }
-
-    // Order.prototype.removePattern = function(patternId) {
-    //     // first check if the pattern is referenced in the sequence
-
-    //     if(patternId < 0 || patternId >= this.patterns.length) return; // out of bounds
-
-    //     for(let i = 0; i < this.sequence.length; i++) {
-    //         if(this.sequence[i] == patternId) return; // it has been
-    //     }
-
-    //     this.patterns.splice(patternId, 1); // remove the single pattern
-    //     this.numPatterns--;
-
-    //     for(let i = 0; i < this.sequence.length; i++) {
-    //         if(this.sequence[i] > patternId) this.sequence[i]--;
-    //     }
-    // }
-
-    // Order.prototype.removePatternFromSequence = function(patternId) {
-    //     if (!this.sequence.includes(patternId)) return;
-
-    //     this.sequence.filter(
-    //         (entry) => entry != patternId
-    //     );
-    // }
-
-    // Order.prototype.setSequence = function(seq) {
-    //     if(!Array.isArray(seq)) return;
-
-    //     for(let i = 0; i < seq.length; i++) {
-    //         const x = Number(seq[i]);
-    //         if(!Number.isInteger(x)) return;
-    //         if(x < 0 || x >= this.patterns.length) return;
-    //     }
-        
-    //     this.sequence = seq;
-    // }
-
-    // Order.prototype.addPatternToSequence = function(patternId, pos) {
-    //     if(patternId < 0 || patternId >= this.patterns.length || pos < 0) return; // out of bounds
-
-    //     this.sequence.splice(pos, 0, patternId);
-    // }
-
-    // Order.prototype.removeEntryFromSequence = function(pos) {
-    //     if(pos < 0 || pos >= this.sequence.length) return; // out of bounds
-
-    //     this.sequence.splice(pos, 1);
-    // }
-
-    // Order.prototype.compile = function() {
-    //     // call this to send data over to engine
-    //     let data = {};
-    //     const flattened = []
-    //     data.sequence = this.sequence;
-    //     data.numPatterns = this.patterns.length;
-
-    //     for(let i = 0; i < this.patterns.length; i++) {
-    //         flattened.push(this.patterns[i].flatten())
-    //     }
-
-    //     data.patterns = flattened.flat();
-
-    //     return data;
-    // }
-
-    // Order.prototype.toString = function() {
-    //     return this.getEdenCode();
-    // }
-
-    // Order.prototype.getEdenCode = function () {
-    //     var s = "Order(" + Eden.edenCodeForValues(
-    //         this.obsName)+")";
-    //     return s;
-    // }
-}}$
-
 # SAMPLE JS FUNCTIONS
 ${{
     Sample.prototype.getWaveform = function() {
@@ -745,8 +656,20 @@ action add_channels {
 
 ## ACTIONS
 
-action updatesamplelist {
+action MakeSampleEditor{
+
+    # grab waveform data and display it (we dont know how to)
+    # I guess we can just use tiny rectangles and blit them onto the screen according to the size
     
+
+    sampleEditor is [];
+}
+
+action MakeInstrumentEditor{
+
+
+
+    instrEditor is [];
 }
 
 action makeui {
@@ -769,7 +692,9 @@ cellWidth is view_PatternEditor_width/6 * scale;
 cellHeight is view_PatternEditor_height/24 * scale;
 
 gridOffset  is [40 - scrollHorz, view_PatternEditor_height/1.7 - (currentRow)*cellHeight]
-orderOffset is [view_PatternEditor_width/50,  view_PatternEditor_height / 16 - (currentOrder+1)*fontSize + 7]
+orderOffset is [view_PatternEditor_width/75, view_PatternEditor_height/16 -(currentOrder+1)*fontSize + cellHeight/2]
+instrOffset is [1, fontSize -(instrScroll)*fontSize];
+sampleOffset is [1, fontSize - (sampleScroll)*fontSize];
 
 
 # Covers
@@ -781,9 +706,9 @@ rowNoStrip is Rectangle(0, view_PatternEditor_height/4, 40, 3*view_PatternEditor
 instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
 samplesBg is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
 
-orderBackground is Rectangle(0, 0, view_PatternEditor_width/8, view_PatternEditor_height/8, "#784545", "#000000");
-orderSeqSep is Rectangle(0, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
-orderPatSep is Rectangle(view_PatternEditor_width/16, 0, view_PatternEditor_width/16, view_PatternEditor_height/8, "#00000000", "#000000");
+orderBackground is Rectangle(0, 0, view_PatternEditor_width/12, view_PatternEditor_height/8, "#784545", "#000000");
+orderSeqSep is Rectangle(0, 0, view_PatternEditor_width/24, view_PatternEditor_height/8, "#00000000", "#000000");
+orderPatSep is Rectangle(view_PatternEditor_width/24, 0, view_PatternEditor_width/24, view_PatternEditor_height/8, "#00000000", "#000000");
 
 instrSep is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
 sampSep is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
@@ -810,6 +735,9 @@ orderDelButton is Button("orderdelete", "Del.", buttonSize*2, view_PatternEditor
 sampleLoadButton is Button("sampleload", "Load", 3*view_PatternEditor_width/4 + fontSize*4, 0, buttonSize*2, buttonSize);
 sampleClearButton is Button("sampleclear", "Clear", 3*view_PatternEditor_width/4 + buttonSize*2 + fontSize*4, 0, buttonSize*2, buttonSize);
 
+stepPlusButton is Button("stepplus", "+");
+stepMinusButton is Button("stepminus", "-");
+
 sampleEditButton is Button("sampleedit", "Smp Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
 
 instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
@@ -832,6 +760,7 @@ speedText is Text("SPD  " + ticksPerRow, view_PatternEditor_width/8, view_Patter
 patternIDTxt is Text("Pattern: " + (currentPattern - 1), view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
 
 octaveText is Text("Octave: " + octave, view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
+stepText is Text("Step: " + step);
 
 information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator];
 
@@ -839,29 +768,55 @@ information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instr
 seqClassifier is "0" + s if(s < 10) else s;
 patClassifier is "0" + patternOrder[s+1] if (patternOrder[s+1] < 10) else patternOrder[s+1];
 
-orderCell is Rectangle(0, 0 + orderOffset[2], cellWidth, cellHeight, "#c95757");
+orderCell is Rectangle(0, view_PatternEditor_height/16 - cellHeight/2, 2*cellWidth/3, cellHeight, "#c95757");
 
 seqNum  is Text(seqClassifier, 0 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
-patNum is Text(patClassifier, view_PatternEditor_width/16 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
+patNum is Text(patClassifier, view_PatternEditor_width/28 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
 
 orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSeqSep];
 
 # Instrument List Rendering
 
-instrName is Textbox()
+# name, x, y, width, height, placeholder, maxlength, enabled
+# instrName is Textbox("instrument_" + s, 0, 0, 100, 100, "", 200, true, Object("background-color", "transparent")) with s is 1;
 
-instrNum is Text(s, view_PatternEditor_width/2, (s - 1)*fontSize + orderOffset[2], fontSize, "black" if s == current_instrument else "white") with s is 1..128;
+instrNum is Text(s if ((s - 1)*fontSize + instrOffset[2] + fontSize < view_PatternEditor_height/4) else "", view_PatternEditor_width/2 + instrOffset[1], (s - 1)*fontSize + instrOffset[2], fontSize, "black" if s == currentInstrument else "white") with s is 1..128;
 
-instrListRender is [instrumentsBg, instrNum, instrSep]
+# Instrument List Scrolling 
+
+instrumentScrollView is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/4, "#625353", "#ffffff");
+
+topIScroll is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+btmIScroll is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, view_PatternEditor_height/4 - view_PatternEditor_height/28, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+
+instrumentScrollBar is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, view_PatternEditor_height/28 + 
+    (instrScroll * fontSize)/(view_PatternEditor_height/4) * ((view_PatternEditor_height/4) / fontSize),  view_PatternEditor_height/28, (view_PatternEditor_width/4)/(128 * fontSize) * (view_PatternEditor_width/4 - 2*view_PatternEditor_height/28),"#c98585", "#000000");
+
+instrumentScrollPort is [instrumentScrollView, topIScroll, btmIScroll, instrumentScrollBar];
+
+instrListRender is [instrumentsBg, instrNum, instrSep, instrName, instrumentScrollPort];
 
 # Sample List Rendering
-sampleNum is Text(s, 3 * view_PatternEditor_width/4, s*fontSize + orderOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+sampleNum is Text(s if (s*fontSize + sampleOffset[2] + fontSize < view_PatternEditor_height/4) else "", 3 * view_PatternEditor_width/4 + sampleOffset[1], s*fontSize + sampleOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
 sampleName is samplePool[s+1].filename if (s+1 <= samplePool.length) else "";
 
-sampleText is Text(sampleName, 3 * view_PatternEditor_width/4 + fontSize, s*fontSize + orderOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+sampleText is Text(sampleName if (s*fontSize + sampleOffset[2] < view_PatternEditor_height/4) else "", 3 * view_PatternEditor_width/4 + fontSize + sampleOffset[1], s*fontSize + instrOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
-sampleListRender is [samplesBg, sampleNum, sampleText, sampleSep]
+
+# Sample List Scrolling
+
+sampleScrollView is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/4, "#625353", "#ffffff");
+
+topSScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+btmSScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height/4 - view_PatternEditor_height/28, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+
+sampleScrollBar is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height/28 + 
+    (sampleScroll * fontSize)/(view_PatternEditor_height/4) * ((view_PatternEditor_height/4) / fontSize),  view_PatternEditor_height/28, (view_PatternEditor_height/4)/(16 * fontSize) * (view_PatternEditor_width/4 - 2*view_PatternEditor_height/28),"#c98585", "#000000");
+
+sampleScrollPort is [sampleScrollView, topSScroll, btmSScroll, sampleScrollBar];
+
+sampleListRender is [samplesBg, sampleNum, sampleText, sampleSep, sampleScrollPort]
 
 # Grid Rendering
 channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/4 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
@@ -886,22 +841,23 @@ effectText is Text(effectClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 
 paramText is Text(paramClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 4 + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 4 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
 
 
+# KEYBOARD FOCUS
 cellFocus is Rectangle(keyboardChannelFocus*cellWidth + keyboardElementFocus*cellWidth/5 +  gridOffset[1], gridOffset[2] +  keyboardRowFocus * cellHeight, cellWidth / 5, cellHeight, "#00000000" if (!gridFocus) else "rgb(0, 0, 0)");
 
 gridBase is gridCell with x is 0..(numChannels - 1), y is 0..(patternRows[currentPattern] - 1);
 
-# SCROLLING
+# GRID SCROLLING
 scrollView is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width, view_PatternEditor_height/28, "#625353", "#7f7f7f");
 
 leftHorzScroll is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
 rightHorzScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
 
 scrollBar is Rectangle(view_PatternEditor_height/28 + 
-    (currentElement/5 * cellWidth + currentChannel * cellWidth)/(view_PatternEditor_width) * (view_PatternEditor_width/cellWidth * 5) , view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width/(numChannels*cellWidth + 40) * (view_PatternEditor_width - 2*view_PatternEditor_height/28), view_PatternEditor_height/28,"#c98585");
+    (currentElement/5 * cellWidth + currentChannel * cellWidth)/(view_PatternEditor_width) * (view_PatternEditor_width/cellWidth * 5) , view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width/(numChannels*cellWidth + 40) * (view_PatternEditor_width - 2*view_PatternEditor_height/28), view_PatternEditor_height/28,"#c98585", "#000000");
 
-horzScroll is [scrollView, scrollBar, leftHorzScroll, rightHorzScroll];
+gridHorzScroll is [scrollView, scrollBar, leftHorzScroll, rightHorzScroll];
 
-grid is [gridBase, cellFocus, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect,  rowNoStrip, rowNos, horzScroll];
+grid is [gridBase, cellFocus, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect,  rowNoStrip, rowNos, gridHorzScroll];
 
 # In render order
 editorCanvas is [bottomCover, grid, topCover, orderRender, instrListRender, sampleListRender, information, buttons];
@@ -911,11 +867,12 @@ action initUIevents {
     mouseHoverRow is floor((mouseY - gridOffset[2])/cellHeight);
     mouseHoverChannel is floor((mouseX - gridOffset[1])/cellWidth);
 
-    mouseHoverInstrumentSampleList is floor((mouseY - 2*fontSize + orderOffset[2])/fontSize);
+    mouseHoverInstrumentList is floor((mouseY - instrOffset[2])/fontSize);
+    mouseHoverSampleList is floor((mouseY - sampleOffset[2])/fontSize);
 
-    mouseOverInstrument is (mouseHoverInstrumentSampleList >= 1 && mouseHoverInstrumentSampleList <= 127 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4 && mouseY < view_PatternEditor_height/4);
+    mouseOverInstrument is (mouseHoverInstrumentList >= 0 && mouseHoverInstrumentList <= 127 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4 && mouseY < view_PatternEditor_height/4);
 
-    mouseOverSample is (mouseHoverInstrumentSampleList >= 1 && mouseHoverInstrumentSampleList <= 127 && mouseX >= 3 * view_PatternEditor_width/4 && mouseX <= view_PatternEditor_width && mouseY < view_PatternEditor_height/4);
+    mouseOverSample is (mouseHoverSampleList >= 0 && mouseHoverSampleList <= 127 && mouseX >= 3 * view_PatternEditor_width/4 && mouseX <= view_PatternEditor_width && mouseY < view_PatternEditor_height/4);
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
@@ -924,7 +881,7 @@ action initUIevents {
     cellScroll = false;
 
     when(mouseDown) {
-        if(!mouseButton == "Left down" && mouseOverCell && abs(mouseWheelVelocity) == 0) {
+        if(mouseButton == "Left down" && mouseOverCell) {
             rowFocus  = mouseHoverRow;
             channelFocus = mouseHoverChannel;
             elementFocus = mouseHoverElement;
@@ -938,70 +895,53 @@ action initUIevents {
 
             ${{console.log(root.lookup("elementFocus").value())}}$
         }
+
+        if (mouseButton == "Left down" && mouseOverInstrument) {
+            currentInstrument = mouseHoverInstrumentList + 1;
+        }
+
+        if (mouseButton == "Left down" && mouseOverSample) {
+            
+            currentSample = mouseHoverSampleList;
+        }
     }
 
     when(mouseWheel) {
         if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/4) {
             ${{console.log("Scrolling...")}}$
-            if(mouseWheelVelocity > 0) {
-                currentRow++;
-            } else if (mouseWheelVelocity < 0) {
+            if(mouseWheelVelocity > 0 && currentRow < patternRows[currentPattern] - 1) {
+                currentRow++; # change this to be an independent scroll
+            } else if (mouseWheelVelocity < 0 && currentRow > 0) {
                 currentRow--;
             }
-        } else if (mouseOverCell) {
-            idx = patternOffset[currentPattern] +  (rowFocus * numChannels + channelFocus) * 5 + 1; # 1-indexed
-            cellIdx = patternOffset[currentPattern] + rowFocus * numChannels + channelFocus;
-            if(elementFocus == 0) { # note
-                temp = patternArray[idx];
-                
-                if(mouseWheelVelocity < 0 && temp < 119) {
-                    temp = temp + 1;
-                } else if (mouseWheelVelocity > 0 && temp > 0) {
-                    temp = temp - 1;  
-                }
+        }
 
-                setNote(temp, idx - 1 + 0, cellIdx);
-                setInstrument(current_instrument, idx - 1 + 1, cellIdx)
-            } else if (elementFocus == 1) { # instrument
-                temp = patternArray[idx + 1];
+        if(!mousePressed || !mouseOverCell && mouseY < view_PatternEditor_height/4 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4) {
+            ${{console.log("Scrolling through instrument list")}}$
+            if(mouseWheelVelocity > 0 && instrScroll < 128) {
+                instrScroll++; # change this to be an independent scroll
+            } else if (mouseWheelVelocity < 0 && instrScroll > 0) {
+                instrScroll--;
+            }
+        }
 
-                if(mouseWheelVelocity < 0 && temp < 127) {
-                    temp = temp + 1;
-                } else if (mouseWheelVelocity > 0 && temp > 0) {
-                    temp = temp - 1;  
-                }
+        if(!mousePressed || !mouseOverCell && mouseY < view_PatternEditor_height/4 && mouseX >= 3*view_PatternEditor_width/4 && mouseX < view_PatternEditor_width) {
+            ${{console.log("Scrolling through sample list")}}$
 
-                setInstrument(temp, idx - 1 + 1, cellIdx);
-            } else if (elementFocus == 2) { # volume
-                temp = patternArray[idx + 2];
-                
-                if(mouseWheelVelocity < 0 && temp < 100) {
-                    temp = temp + 1;
-                } else if (mouseWheelVelocity > 0 && temp > 0) {
-                    temp = temp - 1;  
-                }
+            if(mouseWheelVelocity > 0 && sampleScroll < 16) {
+                sampleScroll++; # change this to be an independent scroll
+            } else if (mouseWheelVelocity < 0 && sampleScroll > 0) {
+                sampleScroll--;
+            }
+        }
+    }
 
-                setVolume(temp, idx - 1 + 2, cellIdx);
-            } else if (elementFocus == 3) { # effect
-                temp = patternArray[idx + 3];
-                
-                if(mouseWheelVelocity < 0 && temp < 26) {
-                    temp = temp + 1;
-                } else if (mouseWheelVelocity > 0 && temp > 0) {
-                    temp = temp - 1;  
-                }
-
-                setEffect(temp, idx - 1 + 3, cellIdx);
-            } else if (elementFocus == 4) { # param
-                temp = patternArray[idx + 4];
-                
-                if(mouseWheelVelocity < 0 && temp < 255) {
-                    temp = temp + 1;
-                } else if (mouseWheelVelocity > 0 && temp > 0) {
-                    temp = temp - 1;  
-                }
-
-                setParam(temp, idx - 1 + 4, cellIdx);
+    when(touchPanX) {
+        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/4) {
+            if(touchPanXSpeed > 0 && scrollHorz < 16) {
+                scrollHorz += cellWidth;
+            } else if (touchPanXSpeed < 0 && scrollHorz > 0) {
+                scrollHorz-= cellWidth;
             }
         }
     }
@@ -1013,7 +953,7 @@ action initUIevents {
             setNote(elementValue, idx - 1 + 0, cellIdx);
 
             if(patternArray[idx + 1] == 0) {
-                setInstrument(current_instrument, idx - 1 + 1, cellIdx); # also set current instrument
+                setInstrument(currentInstrument, idx - 1 + 1, cellIdx); # also set current instrument
             }
         } else if (currentElement == 1) { # instrument
             temp = patternArray[idx + 1];
@@ -1070,6 +1010,8 @@ action initUIevents {
 
             setParam(temp, idx - 1 + 4, cellIdx);
         }
+
+        currentRow = (currentRow + step) % patternRows[currentPattern];
     }
 
     when(currentPattern) {
@@ -1185,6 +1127,28 @@ action initUIevents {
         }
     }
 
+    when(stepplus_click) {
+        if (step < 16) {
+            step++;
+        }
+    }
+
+    when(stepminus_click) {
+        if (step > 0) {
+            step--;
+        }
+    }
+
+    when(orderinsert_click) {
+        if(numOrders < 127) {
+            patternOrder[numOrders + 1] = currentPattern - 1;
+            numOrders++;
+            # dispatch to wasm
+
+            ${{root.lookup("engine_node").value().port.postMessage({type: "insert_order", value: root.lookup("currentPattern").value() - 1})}}$
+        }
+    }
+
     when(keyboardRowFocus) {
         currentRow is keyboardRowFocus;
     }
@@ -1222,12 +1186,6 @@ action initUIevents {
 
     
 }
-action instruments {
-## Define instruments here
-# Use Sample() and Synth(), then add to instruments
-
-
-}
 
 action config {
 ## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
@@ -1239,7 +1197,7 @@ currentPattern = 0;
 currentRow = 0;
 currentChannel = 0;
 numChannels = 8;
-current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
+currentInstrument = 1; # used for midi playback and drawing on grid, will have zero effect during arrangement playback
 
 is_playing is false;
 }
@@ -1247,7 +1205,7 @@ is_playing is false;
 action makepattern {
     size = NUM_PATTERNS * NUM_ROWS * NUM_CHANNELS * 5;
     patternArray = 0 with i is 1..size;
-    patternOrder = 0 with i is 1..NUM_ORDERS;
+    patternOrder = 255 with i is 1..NUM_ORDERS;
     patternRows = 64 with i is 1..NUM_PATTERNS;
 
     offset = 0;
@@ -1258,6 +1216,8 @@ action makepattern {
         patternOffset[i] = offset;
         offset = patternOffset[i] + patternRows[i];
     }
+
+    patternOrder[1] = 0;
 }
 
 action timing {
@@ -1341,11 +1301,15 @@ action ACTIVE {
     numSamples = 0;
 
     rowsPerPattern = 64;
-    current_instrument = 1;
+    currentInstrument = 1;
+    currentSample = 0;
 
     patternDirty = false;
     sampleDirty = true;
+
     gridFocus = false;
+    
+    currentView = "grid";
 
     elementDirty = false;
     elementValue = 0;
@@ -1357,6 +1321,11 @@ action ACTIVE {
     keyboardElementFocus = 0;
 
     scrollHorz = 0;
+    scrollVert = 0;
+    instrScroll = 0;
+    sampleScroll = 0;
+
+    step = 0;
 
     is_playing is false;
     order = 0 with i is 1..255;
