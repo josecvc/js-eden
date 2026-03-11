@@ -31,6 +31,7 @@ NUM_CHANNELS is 8;
 NUM_ORDERS is 255;
 
 samplePool = [];
+playbackArray = null;
 
 ${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
@@ -65,7 +66,13 @@ ${{
         }).catch((e) => {console.log("Error: Failed to retrieve WebAssembly module.\n" + e);})
 
         node.port.onmessage = (e) => {
-            console.log(e.data);
+            const data = e.data;
+
+            if(data.type == "sab") {
+                root.lookup("playbackArray").assign(
+                    new Int32Array(data.sharedBuffer), root.scope
+                );
+            }
         };
 
         root.lookup("engine_node").assign(node, root.scope, Eden.EdenSymbol.defaultAgent);
@@ -76,27 +83,38 @@ ${{
 
 ${{
     const keysDown = new Set();
-    const transpose = 12;
-    const multiplier = 1;
-    const keyToNote = { // MIDI
-    "KeyQ" :   60 + transpose*multiplier, // C 4
-    "Digit2" : 61 + transpose*multiplier, // C# 4/Db 4
-    "KeyW" :   62 + transpose*multiplier, // D 4
-    "Digit3" : 63 + transpose*multiplier, // D# 4/Eb 4
-    "KeyE" :   64 + transpose*multiplier, // E 4
-    "KeyR" :   65 + transpose*multiplier, // F 4
-    "Digit5" : 66 + transpose*multiplier, // F# 4/Gb 4
-    "KeyT" :   67 + transpose*multiplier, // G 4
-    "Digit6" : 68 + transpose*multiplier, // G# 4/Ab 4
-    "KeyY" :   69 + transpose*multiplier, // A 4
-    "Digit7" : 70 + transpose*multiplier, // A# 4/Bb 4
-    "KeyU" :   71 + transpose*multiplier, // B 4
-    "KeyI" :   72 + transpose*multiplier, // C 5
-    "Digit9" : 73 + transpose*multiplier, // C# 5/Db 5
-    "KeyO" :   74 + transpose*multiplier, // D 5
-    "Digit0" : 75 + transpose*multiplier, // D# 5/ Eb 5
-    "KeyP" :   76 + transpose*multiplier // E
-    }
+    
+    const keyToNote = { // Use your keyboard!
+        "KeyZ" : 0, // C 0
+        "KeyS": 1,  // C#0
+        "KeyX" : 2, // D 0
+        "KeyD" : 3, // D#0
+        "KeyC": 4,  // E 0
+        "KeyV": 5,  // F 0
+        "KeyG": 6,  // F#0
+        "KeyB": 7,  // G 0
+        "KeyH": 8,  // G#0
+        "KeyN": 9,  // A 0 
+        "KeyJ": 10, // A#0
+        "KeyM": 11, // B 0
+        "Comma": 12,     "KeyQ" : 12, // C 1
+        "KeyL": 13,      "Digit2" : 13, // C#1
+        "Period": 14,    "KeyW" :   14,//D 1
+        "Semicolon": 15, "Digit3" : 15, // D#1
+        "KeyE" :   16, // E 1
+        "KeyR" :   17, // F 1
+        "Digit5" : 18, // F#1
+        "KeyT" :   19, // G 1
+        "Digit6" : 20, // G#1
+        "KeyY" :   21, // A 1
+        "Digit7" : 22, // A#1
+        "KeyU" :   23, // B 1
+        "KeyI" :   24, // C 2
+        "Digit9" : 25, // C#2
+        "KeyO" :   26, // D 2
+        "Digit0" : 27, // D#2
+        "KeyP" :   28  // E 2
+    };
 
 
     addEventListener("keydown", (e) => {    
@@ -109,15 +127,57 @@ ${{
 
         if(root.lookup("is_playing").value()) return;
 
+        if (e.shiftKey || e.ctrlKey) return;
+
+        const octave = root.lookup("octave").value();
+
+        const midiKey = keyToNote[code] + (octave + 1) * 12;
+
+        const gridFocus = root.lookup("gridFocus");
         if(!keysDown.has(code)) {
             keysDown.add(code);
             root.lookup("engine_node").value().port.postMessage({
                 type: "note_on",
-                note: keyToNote[code],
+                note: midiKey,
                 instrumentId: root.lookup("current_instrument").value()
             })
         }
+
+        // keyboard assignment for note
         
+        const currentElement = root.lookup("currentElement");
+
+        if(gridFocus.value() && currentElement.value() == 0) {
+            if(!keysDown.has(code)) return;
+
+            root.lookup("elementValue").assign(midiKey, root.scope);
+            root.lookup("elementDirty").assign(true, root.scope);
+        }
+
+    })
+
+    addEventListener("keydown", (e) => {
+        const code = e.code;
+
+        const element = document.activeElement;
+        
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        if(root.lookup("is_playing").value()) return;
+
+        if (e.shiftKey || e.ctrlKey) return;
+
+        const gridFocus = root.lookup("gridFocus");
+        const currentElement = root.lookup("currentElement");
+
+        if(gridFocus.value() && currentElement.value() != 0) {
+            if(!code.startsWith("Digit")) return;
+
+            const val = Number(code.slice(5));
+
+            root.lookup("elementValue").assign(val, root.scope);
+            root.lookup("elementDirty").assign(true, root.scope);
+        }
     })
 
     addEventListener("keyup", (e) => {
@@ -128,17 +188,154 @@ ${{
         if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
 
         if(root.lookup("is_playing").value()) return;
-        
+
+        if (e.shiftKey || e.ctrlKey) return;
+
+        const octave = root.lookup("octave").value();
+        const gridFocus = root.lookup("gridFocus");
+
         if(keyToNote.hasOwnProperty(code)) {
             keysDown.delete(code);
-            root.lookup("engine_node").value().port.postMessage({
+
+            if(gridFocus.value()) { // this is so we dont have to hear the audio play fully when adding data to the grid
+                root.lookup("engine_node").value().port.postMessage({
                 type: "note_off",
-                note: keyToNote[code],
+                note: keyToNote[code] + (octave + 1) * 12,
                 instrumentId: root.lookup("current_instrument").value()
             })
+            }
+        }
+    })
+
+    addEventListener("keydown", (e) => {
+        const element = document.activeElement;
+
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        const code = e.code;
+
+        
+        if(code == "Space") {
+            e.preventDefault(); // don't scroll down
+            const isFocused = root.lookup("gridFocus").value();
+            if(!isFocused) {
+                root.lookup("gridFocus").assign(true, root.scope);
+            } else {
+                root.lookup("gridFocus").assign(false, root.scope);
+            }
+        }
+    })
+
+    addEventListener("keydown", (e) => {
+        const element = document.activeElement;
+
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        const code = e.code;
+
+        if (e.shiftKey && e.ctrlKey) {
+            if (code.startsWith("Digit")) {
+                const octave = Number(code.slice(5)) - 1; // octave 0 - 7 (from bottom set of keys)
+
+                if (octave < 0 || octave > 7) return; // 0 and 9 not allowed;
+
+                root.lookup("octave").assign(octave, root.scope);
+            }
+        }
+    })
+
+    addEventListener("keydown", (e) => {
+        const element = document.activeElement;
+
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        const code = e.code;
+
+        const isFocused = root.lookup("gridFocus").value();
+        if (element.tagName.toLowerCase() == "canvas" && (code == "ArrowUp" || code == "ArrowDown" || code == "ArrowLeft" || code == "ArrowRight")) {
+            e.preventDefault();
+        }
+
+        if (!isFocused) return;
+
+        console.log("You pressed " + code);
+        if (code == "ArrowUp") {
+            const rowFocus = root.lookup("keyboardRowFocus");
+            const currentPattern = root.lookup("currentPattern");
+            const currentPatternRows = root.lookup("patternRows").value()[currentPattern.value() - 1];
+
+            if (rowFocus.value() == 0) return;
+            
+            rowFocus.assign(rowFocus.value() - 1, root.scope);
+        } else if (code == "ArrowDown") {
+            const rowFocus = root.lookup("keyboardRowFocus");
+            const currentPattern = root.lookup("currentPattern");
+            const currentPatternRows = root.lookup("patternRows").value()[currentPattern.value() - 1];
+
+            if (rowFocus.value() >= currentPatternRows - 1) return;
+
+            rowFocus.assign(rowFocus.value() + 1, root.scope);
+        } else if (code == "ArrowLeft") {
+            const channelFocus = root.lookup("keyboardChannelFocus");
+            const elementFocus = root.lookup("keyboardElementFocus");
+            const numElements = 5;
+            const numChannels = root.lookup("numChannels");
+
+            if (channelFocus.value() <= 0 && elementFocus.value() <= 0) return;
+            
+            if(elementFocus.value() - 1 < 0) {
+                elementFocus.assign(numElements - 1, root.scope);
+                channelFocus.assign(channelFocus.value() - 1, root.scope);
+            } else {
+                elementFocus.assign(elementFocus.value() - 1, root.scope);
+            }
+        } else if (code == "ArrowRight") {
+            const channelFocus = root.lookup("keyboardChannelFocus");
+            const elementFocus = root.lookup("keyboardElementFocus");
+            const numElements = 5;
+            const numChannels = root.lookup("numChannels");
+
+            if (channelFocus.value() >= (numChannels.value() - 1) && elementFocus.value() >= (numElements - 1)) return;
+            
+            if(elementFocus.value() + 1 == numElements) {
+                elementFocus.assign(0, root.scope);
+                channelFocus.assign(channelFocus.value() + 1, root.scope);
+            } else {
+                elementFocus.assign(elementFocus.value() + 1, root.scope);
+            }
         }
     })
 }}$;
+
+${{
+    function updatePlayback() {
+        const playing = root.lookup("is_playing");
+        const playbackArray = root.lookup("playbackArray");
+
+        const ROW = 0;
+        const PATTERN = 1;
+        const ORDER = 2;
+        const IS_PLAYING = 3;
+
+        if (playing.value()) {
+            const row = Atomics.load(playbackArray.value(), ROW);
+            const pattern = Atomics.load(playbackArray.value(), PATTERN);
+            const order = Atomics.load(playbackArray.value(), ORDER);
+            // const playbackState = Atomics.load(playbackArray.value(), IS_PLAYING);
+
+            root.lookup("currentRow").assign(row, root.scope);
+            root.lookup("currentPattern").assign(pattern + 1, root.scope);
+            root.lookup("currentOrder").assign(order, root.scope);
+
+            // TODO: Make another SharedArrayBuffer to directly modify playback state from JS-EDEN (without the need for postMessage)
+            // root.lookup("is_playing").assign(Boolean(playbackState), root.scope); 
+        }
+
+        requestAnimationFrame(updatePlayback);
+    }
+
+    requestAnimationFrame(updatePlayback);
+}}$
 
 ${{
 Sample = function(obsName) {
@@ -440,29 +637,6 @@ proc createSynth {
     addInstrument(synth);
 }
 
-## MIDI2NOTE
-
-func midi2note {
-    para midi;
-    ${{
-        const midiToKey = {
-             0: "C‒",  1: "C#",
-             2: "D‒",  3: "D#",
-             4: "E‒",  
-             5: "F‒",  6: "F#",
-             7: "G‒",  8: "G#",
-             9: "A‒", 10: "A#",
-            11: "B‒"
-        }
-
-        const octave = Math.floor(midi / 12) - 1;
-
-        const semitone = midiToKey[midi % 12];
-
-        return semitone + octave.toString();
-    }}$
-}
-
 func int2hex {
     para num;
     ${{
@@ -594,14 +768,15 @@ buttonSize is 30 * scale;
 cellWidth is view_PatternEditor_width/6 * scale;
 cellHeight is view_PatternEditor_height/24 * scale;
 
-gridOffset  is [40, view_PatternEditor_height/1.7 - currentRow*cellHeight]
+gridOffset  is [40 - scrollHorz, view_PatternEditor_height/1.7 - (currentRow)*cellHeight]
 orderOffset is [view_PatternEditor_width/50,  view_PatternEditor_height / 16 - (currentOrder+1)*fontSize + 7]
 
 
 # Covers
 topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/4, "#625353", "#000000"); # add gradient afterwards
-bottomCover is Rectangle(0, view_PatternEditor_height/4, view_PatternEditor_width, 3*view_PatternEditor_height/4, "#74747400", "#000000");
+bottomCover is Rectangle(0, view_PatternEditor_height/4, view_PatternEditor_width, 3*view_PatternEditor_height/4 - view_PatternEditor_height/28, "#74747400", "#000000");
 channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/4 , cellWidth, 3*view_PatternEditor_height/4, "#00000000", "#000000") with ch is 0..(numChannels - 1);
+rowNoStrip is Rectangle(0, view_PatternEditor_height/4, 40, 3*view_PatternEditor_height/4, "white", "black");
 
 instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
 samplesBg is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
@@ -626,6 +801,9 @@ speedMinusButton is Button("speedminus", "-", view_PatternEditor_width/4.5 + but
 patternPlusButton is Button("patternplus", "+", view_PatternEditor_width/2.75, view_PatternEditor_height/15, buttonSize, buttonSize);
 patternMinusButton is Button("patternminus", "-", view_PatternEditor_width/2.75 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
 
+octavePlusButton is Button("octaveplus", "+", view_PatternEditor_width/2.75, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+octaveMinusButton is Button("octaveminus", "-", view_PatternEditor_width/2.75 + buttonSize, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+
 orderInsertButton is Button("orderinsert", "Ins.", 0, view_PatternEditor_height/8, buttonSize*2, buttonSize);
 orderDelButton is Button("orderdelete", "Del.", buttonSize*2, view_PatternEditor_height/8, buttonSize*2, buttonSize);
 
@@ -639,7 +817,7 @@ instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, vie
 buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton, 
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
     orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton,
-    sampleEditButton, instrumentEditButton
+    sampleEditButton, instrumentEditButton, octavePlusButton, octaveMinusButton
 ];
 
 # Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
@@ -653,7 +831,9 @@ tempoText is Text("BPM  " + bpm, view_PatternEditor_width/8, view_PatternEditor_
 speedText is Text("SPD  " + ticksPerRow, view_PatternEditor_width/8, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
 patternIDTxt is Text("Pattern: " + (currentPattern - 1), view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
 
-information is [titleText, tempoText, speedText, patternIDTxt, instrIndicator, sampleIndicator];
+octaveText is Text("Octave: " + octave, view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
+
+information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator];
 
 # Order Rendering
 seqClassifier is "0" + s if(s < 10) else s;
@@ -667,6 +847,9 @@ patNum is Text(patClassifier, view_PatternEditor_width/16 + orderOffset[1], s*fo
 orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSeqSep];
 
 # Instrument List Rendering
+
+instrName is Textbox()
+
 instrNum is Text(s, view_PatternEditor_width/2, (s - 1)*fontSize + orderOffset[2], fontSize, "black" if s == current_instrument else "white") with s is 1..128;
 
 instrListRender is [instrumentsBg, instrNum, instrSep]
@@ -686,22 +869,39 @@ rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2
 gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
 
 # Cell Mutation
-noteClassifier is midi2note(patternFocus[r+1][ch+1][1]) if (patternFocus[r+1][ch+1][1] >= 12 && patternFocus[r+1][ch+1][1] <= 119) else "---";
+
+noteString is semitones[(patternFocus[r+1][ch+1][1] % 12) + 1] + (floor(patternFocus[r+1][ch+1][1] / 12) - 1);
+
+noteClassifier is noteString if (patternFocus[r+1][ch+1][1] >= 12 && patternFocus[r+1][ch+1][1] <= 119) else "---";
 instrClassifier is patternFocus[r+1][ch+1][2] if (patternFocus[r+1][ch+1][2] >= 1 && patternFocus[r+1][ch+1][2] <= 255) else "--";
 volClassifier is patternFocus[r+1][ch+1][3] if (patternFocus[r+1][ch+1][3] >= 1 && patternFocus[r+1][ch+1][3] <= 100) else "--";
 effectClassifier is int2char(patternFocus[r+1][ch+1][4]) if (patternFocus[r+1][ch+1][4] >= 1 && patternFocus[r+1][ch+1][4] <= 26) else "-";
 paramClassifier is int2hex(patternFocus[r+1][ch+1][5]) if (patternFocus[r+1][ch+1][5] >= 1 && patternFocus[r+1][ch+1][5] <= 255) else "--";
 
 # Cell Text
-noteText   is Text(noteClassifier            , ch*cellWidth + gridOffset[1] + cellWidth/30             , r*cellHeight + gridOffset[2], 22 *  scale, "black") with ch is 0..(numChannels - 1), r is 0..63;
-instrText  is Text(instrClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 + cellWidth/15 , r*cellHeight + gridOffset[2], 22 * scale, "black") with ch is 0..(numChannels - 1), r is 0..63;
-volText    is Text(volClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 2  + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "black") with ch is 0..(numChannels - 1), r is 0..63;
-effectText is Text(effectClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 3  + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "black") with ch is 0..(numChannels - 1), r is 0..63;
-paramText is Text(paramClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 4 + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "black") with ch is 0..(numChannels - 1), r is 0..63;
+noteText   is Text(noteClassifier            , ch*cellWidth + gridOffset[1] + cellWidth/30             , r*cellHeight + gridOffset[2], 22 *  scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 0 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
+instrText  is Text(instrClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 + cellWidth/15 , r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 1 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
+volText    is Text(volClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 2  + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 2 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
+effectText is Text(effectClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 3  + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 3 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
+paramText is Text(paramClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 4 + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 4 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
 
-gridBase is gridCell with x is 0..(numChannels - 1), y is 0..63;
 
-grid is [gridBase, rowNos, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect];
+cellFocus is Rectangle(keyboardChannelFocus*cellWidth + keyboardElementFocus*cellWidth/5 +  gridOffset[1], gridOffset[2] +  keyboardRowFocus * cellHeight, cellWidth / 5, cellHeight, "#00000000" if (!gridFocus) else "rgb(0, 0, 0)");
+
+gridBase is gridCell with x is 0..(numChannels - 1), y is 0..(patternRows[currentPattern] - 1);
+
+# SCROLLING
+scrollView is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width, view_PatternEditor_height/28, "#625353", "#7f7f7f");
+
+leftHorzScroll is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+rightHorzScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+
+scrollBar is Rectangle(view_PatternEditor_height/28 + 
+    (currentElement/5 * cellWidth + currentChannel * cellWidth)/(view_PatternEditor_width) * (view_PatternEditor_width/cellWidth * 5) , view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width/(numChannels*cellWidth + 40) * (view_PatternEditor_width - 2*view_PatternEditor_height/28), view_PatternEditor_height/28,"#c98585");
+
+horzScroll is [scrollView, scrollBar, leftHorzScroll, rightHorzScroll];
+
+grid is [gridBase, cellFocus, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect,  rowNoStrip, rowNos, horzScroll];
 
 # In render order
 editorCanvas is [bottomCover, grid, topCover, orderRender, instrListRender, sampleListRender, information, buttons];
@@ -719,17 +919,23 @@ action initUIevents {
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= 63 && mouseHoverChannel >= 0 && mouseHoverChannel <= 3 && mouseY >= view_PatternEditor_height/4);
+    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= view_PatternEditor_height/4);
 
     cellScroll = false;
 
-
     when(mouseDown) {
-        if(mouseButton == "Left down" && mouseOverCell) {
+        if(!mouseButton == "Left down" && mouseOverCell && abs(mouseWheelVelocity) == 0) {
             rowFocus  = mouseHoverRow;
             channelFocus = mouseHoverChannel;
             elementFocus = mouseHoverElement;
             cellScroll = true;
+
+            if(gridFocus) {
+                keyboardElementFocus = elementFocus;
+                keyboardChannelFocus = channelFocus;
+                keyboardRowFocus = rowFocus;
+            }
+
             ${{console.log(root.lookup("elementFocus").value())}}$
         }
     }
@@ -797,6 +1003,72 @@ action initUIevents {
 
                 setParam(temp, idx - 1 + 4, cellIdx);
             }
+        }
+    }
+
+    when(elementDirty) {
+        idx = patternOffset[currentPattern] +  (currentRow * numChannels + currentChannel) * 5 + 1; # 1-indexed
+        cellIdx = patternOffset[currentPattern] + currentRow * numChannels + currentChannel;
+        if(currentElement == 0) { # note
+            setNote(elementValue, idx - 1 + 0, cellIdx);
+
+            if(patternArray[idx + 1] == 0) {
+                setInstrument(current_instrument, idx - 1 + 1, cellIdx); # also set current instrument
+            }
+        } else if (currentElement == 1) { # instrument
+            temp = patternArray[idx + 1];
+
+            temp = temp * 10 + elementValue;
+
+            if(temp > 128) {
+                while(temp > 128) {
+                    digits = floor(log(temp)); # base 10 approximates number of digits
+
+                    power_ten = pow(10, digits);
+
+                    temp = temp % power_ten;
+                }
+            }
+
+            ${{console.log(root.lookup("temp").value())}}$
+
+            setInstrument(temp, idx - 1 + 1, cellIdx);
+        } else if (currentElement == 2) { # volume
+            temp = patternArray[idx + 2];
+
+            temp = temp * 10 + elementValue;
+
+            if(temp > 100) {
+                while(temp > 100) {
+                    digits = floor(log(temp)); # base 10 approximates number of digits
+
+                    power_ten = pow(10, digits);
+
+                    temp = temp % power_ten;
+                }
+            }
+
+            setVolume(temp, idx - 1 + 2, cellIdx);
+        } else if (elementFocus == 3) { # effect
+            temp = patternArray[idx + 3];
+            
+            if(mouseWheelVelocity < 0 && temp < 26) {
+                temp = temp + 1;
+            } else if (mouseWheelVelocity > 0 && temp > 0) {
+                temp = temp - 1;  
+            }
+
+            setEffect(temp, idx - 1 + 3, cellIdx);
+        } else if (elementFocus == 4) { # param
+            temp = patternArray[idx + 4];
+            
+            if(mouseWheelVelocity < 0 && temp < 255) {
+                temp = temp + 1;
+            } else if (mouseWheelVelocity > 0 && temp > 0) {
+                temp = temp - 1;  
+            }
+
+            setParam(temp, idx - 1 + 4, cellIdx);
         }
     }
 
@@ -900,6 +1172,55 @@ action initUIevents {
             }}$
         }
     }
+
+    when(octaveplus_click) {
+        if (octave < 7) {
+            octave++;
+        }
+    }
+
+    when(octaveminus_click) {
+        if (octave > 0) {
+            octave--;
+        }
+    }
+
+    when(keyboardRowFocus) {
+        currentRow is keyboardRowFocus;
+    }
+
+    when (keyboardChannelFocus) {
+        currentRow is keyboardRowFocus;
+        currentChannel is keyboardChannelFocus;
+    }
+
+    when (keyboardElementFocus) {
+
+        cellLeft = keyboardChannelFocus * cellWidth + keyboardElementFocus * (cellWidth / 5);
+
+        cellRight = cellLeft + (cellWidth / 5);
+
+        viewportLeft  = scrollHorz;
+        viewportRight = scrollHorz + view_PatternEditor_width;
+
+
+        if (cellRight + 40 > viewportRight) {
+            scrollHorz = (cellRight + 40) - view_PatternEditor_width;
+        }
+
+        if (cellLeft < 40) {
+            scrollHorz = cellLeft - 40;
+
+            if (scrollHorz < 0) {
+                scrollHorz = 0;
+            }
+        }
+
+        currentRow is keyboardRowFocus;
+        currentElement is keyboardElementFocus;
+    }
+
+    
 }
 action instruments {
 ## Define instruments here
@@ -916,6 +1237,7 @@ ticksPerRow = 6;
 currentOrder = 0;
 currentPattern = 0;
 currentRow = 0;
+currentChannel = 0;
 numChannels = 8;
 current_instrument = 1; # used for midi playback, will have zero effect during arrangement playback
 
@@ -1008,7 +1330,11 @@ action ACTIVE {
     ticksPerRow = 6;
     currentOrder = 0;
     currentPattern = 1;
-    currentRow = 0;
+
+    currentRow is 0;
+    currentChannel is 0;
+    currentElement is 0;
+
     numChannels = 8;
     numOrders = 1;
 
@@ -1019,9 +1345,24 @@ action ACTIVE {
 
     patternDirty = false;
     sampleDirty = true;
+    gridFocus = false;
+
+    elementDirty = false;
+    elementValue = 0;
+
     wasmReady = false;
+
+    keyboardRowFocus = 0;
+    keyboardChannelFocus = 0;
+    keyboardElementFocus = 0;
+
+    scrollHorz = 0;
 
     is_playing is false;
     order = 0 with i is 1..255;
+    keys = 0 with i is 0..119;
+    semitones = ["C‒", "C#", "D-", "D#", "E‒", "E#", "F‒", "F#", "G‒", "G#", "A-", "A#", "B"]
+    octave = 4;
+
     instrument_list = InstrumentList("instrument_list");
 }

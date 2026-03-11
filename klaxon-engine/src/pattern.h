@@ -29,4 +29,8 @@ struct PatternInfo {
     int num_orders; 
 };
 
+struct ChannelData {
+    uint8_t last_command;
+};
+
 #endif

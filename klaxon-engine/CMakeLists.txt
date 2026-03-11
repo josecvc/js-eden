@@ -18,7 +18,7 @@ set_target_properties(dsp PROPERTIES SUFFIX ".wasm")
 
 target_link_options(dsp PRIVATE
     "--no-entry"
-    "-sEXPORTED_FUNCTIONS=['_malloc', '_free', '_create_engine', '_destroy_engine', '_init_engine', '_process','_register_sample','_play_from_midi','_play_track','_pause_track','_stop_track','_set_tempo','_set_sample_rate','_set_ticks_per_row','_get_num_voices','_get_instrument_id_from_channel','_get_note_id_from_channel','_get_current_row', '_stop_from_midi', '_get_num_patterns', '_get_pattern_offset', '_get_first_cell', '_set_note', '_set_instrument', '_set_volume', '_set_effect', '_set_param', '_get_bpm']"
+    "-sEXPORTED_FUNCTIONS=['_malloc', '_free', '_create_engine', '_destroy_engine', '_init_engine', '_process','_register_sample','_play_from_midi','_play_track','_pause_track','_stop_track','_set_tempo','_set_sample_rate','_set_ticks_per_row','_get_num_voices','_get_instrument_id_from_channel','_get_note_id_from_channel','_get_current_row', '_get_current_pattern','_get_current_order','_get_playback_state' ,'_stop_from_midi', '_get_num_patterns', '_get_pattern_offset', '_get_first_cell', '_set_note', '_set_instrument', '_set_volume', '_set_effect', '_set_param', '_get_bpm']"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"
     "-msimd128"

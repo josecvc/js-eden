@@ -33,8 +33,10 @@ public:
     void mix_instruments(float** output, int frames);
     void clear(float** output, int frames);
     int step(int frames);
+    void advance_tick();
     void process_row();
     void advance_row();
+    void process_effects(int row_tick);
 
     // playback mutation
     void play(int order, int row);
@@ -72,6 +74,9 @@ public:
     
     // Pattern information
     PatternInfo pattern_info;
+
+    // Channel data (last command used, channel audio information)
+    ChannelData channels[128];
 
     Instrument instruments[MAX_INSTRUMENTS];
     std::vector<std::shared_ptr<Sample>> sample_pool;

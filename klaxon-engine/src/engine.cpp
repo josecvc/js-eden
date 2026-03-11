@@ -54,10 +54,6 @@ int Engine::process(float** output, int frames)
 
     if(is_playing) {
         is_hit = step(frames);
-
-        if(is_hit && current_ticks % ticks_per_row == 0) { // only process if the step encounters a hit and we have hit ticks_per_row ticks
-            process_row();
-        }
     }
 
     mix_instruments(output, frames);
@@ -105,27 +101,39 @@ void Engine::clear(float** output, int frames)
     }
 }
 
+
 int Engine::step(int frames)
 {
     int is_hit = 0;
 
-    int start_sample = current_samples;
-    int end_sample = current_samples + frames;
+    current_samples += frames;
 
-    int start_tick = start_sample / samples_per_tick;
-    int end_tick = (end_sample - 1) / samples_per_tick;
-
-    if (end_tick / ticks_per_row > start_tick / ticks_per_row)
+    while (current_samples >= samples_per_tick)
     {
-        is_hit = 1;
-        advance_row();
-        
+        current_samples -= samples_per_tick;
+        advance_tick();
+        is_hit++;
     }
 
-    current_samples = end_sample;
-    current_ticks = end_tick;
-
     return is_hit;
+}
+
+void Engine::advance_tick()
+{
+    current_ticks++;
+
+    int row_tick = current_ticks % ticks_per_row;
+
+    if (row_tick > 0) // run effects after a row is fired (not on, row_tick = 0 is only for triggering notes)
+    {
+        process_effects(row_tick);
+    }
+
+    if (row_tick == 0) {
+        advance_row();
+    }
+
+    // do any command effects in here
 }
 
 void Engine::process_row()
@@ -151,8 +159,9 @@ void Engine::process_row()
 
 void Engine::advance_row()
 {   
+    process_row();
     current_row++;
-    if (current_row > MAX_ROWS - 1) { // 0 -> (MAX_ROWS - 1)
+    if (current_row >= MAX_ROWS) { // 0 -> (MAX_ROWS - 1)
         current_row = 0;
         
 
@@ -160,14 +169,15 @@ void Engine::advance_row()
             is_playing = false;
             current_order = 0;
             current_samples = 0;
-            
-            for(int i=0; i < Polyphony::MAX_VOICES; i++) {
-                poly.remove_voice(poly.voices[i].channel_id, poly.voices[i].note_id, poly.voices[i].instrument_id);
-            }
         }
         
         current_pattern = pattern_info.pattern_order[current_order];
     }
+}
+
+void Engine::process_effects(int row_tick)
+{
+    return;
 }
 
 void Engine::play(int order_num, int row_num)
@@ -181,8 +191,6 @@ void Engine::play(int order_num, int row_num)
     current_order = order_num;
     current_row = row_num;
     current_pattern = pattern_info.pattern_order[0];
-
-    process_row();
 }
 
 void Engine::pause()
@@ -370,7 +378,7 @@ extern "C"
     {
         if (!engine) return -2;
         if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
-        // engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
+        engine->poly.remove_voice(0, note_id, instrument_id - 1);
 
         return 0;
     }
@@ -422,6 +430,24 @@ extern "C"
     {
         if (!engine) return -2;
         return engine->current_row;
+    }
+
+    int get_current_pattern(Engine* engine)
+    {
+        if (!engine) return -2;
+        return engine->current_pattern;
+    }
+
+    int get_current_order(Engine* engine)
+    {
+        if (!engine) return -2;
+        return engine->current_order;
+    }
+
+    int get_playback_state(Engine* engine) 
+    {
+        if (!engine) return -2;
+        return static_cast<int>(engine->is_playing);
     }
 
     int get_first_cell(Engine* engine)
@@ -484,3 +510,26 @@ extern "C"
 
     //TODO: Finish WebAssembly functions
 }
+
+// int Engine::step(int frames)
+// {
+//     int is_hit = 0;
+
+//     int start_sample = current_samples;
+//     int end_sample = current_samples + frames;
+
+//     int start_tick = start_sample / samples_per_tick;
+//     int end_tick = (end_sample - 1) / samples_per_tick;
+
+//     if (end_tick / ticks_per_row > start_tick / ticks_per_row)
+//     {
+//         is_hit = 1;
+//         advance_row();
+        
+//     }
+
+//     current_samples = end_sample;
+//     current_ticks = end_tick;
+
+//     return is_hit;
+// }

@@ -10,6 +10,11 @@ const importObject = {
     }
 };
 
+const ROW = 0;
+const PATTERN = 1;
+const ORDER = 2;
+const IS_PLAYING = 3;
+
 class MixerProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
@@ -106,6 +111,16 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.rowNo = 0;
                 this.patternNo = 0;
                 this.b = 0;
+                
+                this.playbackBuffer = new SharedArrayBuffer(4 * Int32Array.BYTES_PER_ELEMENT);
+                this.playbackArray = new Int32Array(
+                    this.playbackBuffer   
+                );
+
+                this.port.postMessage({
+                    type: "sab",
+                    sharedBuffer: this.playbackBuffer
+                });
 
                 this.samplePool = [];
             })
@@ -223,33 +238,27 @@ class MixerProcessor extends AudioWorkletProcessor {
         
         const n = outs[0][0].length;
 
-        // int process(Engine* engine, float* output, int length)
-        const beat = this.wasm.exports.process(this.enginePtr, this.outputTablePtr, n);
-        const voices = this.wasm.exports.get_num_voices(this.enginePtr);
-        const tempo = this.wasm.exports.get_bpm(this.enginePtr);
+        // int process(Engine* engine, float** output, int length), tick is used for debugging timing issues
+        const tick = this.wasm.exports.process(this.enginePtr, this.outputTablePtr, n);
 
+        const voices = this.wasm.exports.get_num_voices(this.enginePtr);
+
+        const currRow = this.wasm.exports.get_current_row(this.enginePtr);
+        const currPattern = this.wasm.exports.get_current_pattern(this.enginePtr);
+        const currOrder = this.wasm.exports.get_current_order(this.enginePtr);
+        const playbackState = this.wasm.exports.get_playback_state(this.enginePtr);
+        
         if(voices >= 1) {
             console.log(voices + " voice(s)");
         }
 
-        // turn off
-        if(beat == -1) this.playing = false;
-
-        // we detect a beat and so update row count
-        if(beat == 1) {
-            if(this.b % 4 == 0)
-                console.log("beat")
-            this.b++;
-            this.rowNo++;
-        }
-
-        if (this.rowNo >= 64) {
-            this.patternNo++;
-            this.rowNo = 0;
-        }
-        
         outs[0][0].set(this.leftHeap);
         outs[0][1].set(this.rightHeap);
+
+        Atomics.store(this.playbackArray, ROW, currRow);
+        Atomics.store(this.playbackArray, PATTERN, currPattern);
+        Atomics.store(this.playbackArray, ORDER, currOrder);
+        Atomics.store(this.playbackArray, IS_PLAYING, playbackState);
 
         return true;
     }
