@@ -10,36 +10,8 @@ void Engine::init(
     this->sample_rate = sample_rate;
     this->bpm = bpm;
     this->ticks_per_row = ticks_per_row;
-    this->ticks_per_row = ticks_per_row;
         
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.f  / (bpm * 24); // 24 ticks per minute tempo base
-
-    this->pattern_info.cells = reinterpret_cast<Cell*>(new uint8_t[MAX_PATTERNS * MAX_ROWS * MAX_CHANNELS * 5]);
-
-    this->pattern_info.pattern_order[0] = 0;
-
-    for(int i = 1; i < MAX_ORDER;i++)
-    {
-        this->pattern_info.pattern_order[i] = 255;
-    }
-
-    for(int i = 0; i < MAX_PATTERNS; i++)
-    {
-        this->pattern_info.pattern_rows[i] = 64;
-    }
-
-    int offset = 0;
-
-    for(int i = 0; i < MAX_PATTERNS; i++) 
-    {
-        this->pattern_info.pattern_offset[i] = offset;
-        offset = this->pattern_info.pattern_offset[i] + this->pattern_info.pattern_rows[i];
-    }
-
-    this->pattern_info.num_cells = MAX_PATTERNS * MAX_ROWS * MAX_CHANNELS * 5;
-    this->pattern_info.num_patterns = MAX_PATTERNS;
-    this->pattern_info.num_orders = 1;
-    this->pattern_info.num_channels = MAX_CHANNELS;
 
     this->current_samples = 0;
     this->current_ticks = 0;
@@ -134,22 +106,19 @@ void Engine::advance_tick()
     if (row_tick == 0) {
         advance_row();
     }
-
-
 }
 
 void Engine::process_row()
 {
     // find which row to process based on current_row, current_pattern
-    int pat = pattern_info.pattern_offset[current_pattern];
+    auto& pat = pattern_info.patterns[current_pattern];
 
-    int rowStart = pat + current_row * pattern_info.num_channels;
+    int rowStart = current_row * pattern_info.num_channels;
 
     for (int ch = 0; ch < pattern_info.num_channels; ch++)
     {
-        // auto& cell = ptrn.rows[current_row][ch];
         int idx = rowStart + ch;
-        Cell& cell = pattern_info.cells[idx];
+        Cell& cell = pat.cells[idx];
 
         if(cell.instrumentId > instrument_count || cell.noteId < 12 || cell.noteId > 119 || cell.instrumentId < 1) continue;
 
@@ -392,41 +361,31 @@ extern "C"
 
         return engine->poly.get_current_voices();
     }
-
-    // DEBUG FUNCTIONS
+    
     int get_instrument_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
-        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
-         return engine->pattern_info.cells[
-            engine->pattern_info.pattern_offset[pattern_id] + row_id * engine->pattern_info.num_channels + channel_id
+
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+
+        return engine->pattern_info.patterns[pattern_id].cells[
+             row_id * engine->pattern_info.num_channels + channel_id
         ].instrumentId;
     }
 
     int get_note_id_from_channel(Engine* engine, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
-        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
 
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
 
-        return engine->pattern_info.cells[
-            engine->pattern_info.pattern_offset[pattern_id] + row_id * engine->pattern_info.num_channels + channel_id].noteId;
-    }
-
-    int get_num_patterns(Engine* engine)
-    {
-        if (!engine) return -2;
-
-        return engine->pattern_info.num_patterns;
-    }
-
-    int get_pattern_offset(Engine* engine, int pattern_id)
-    {
-        if (!engine) return -2;
-        if(pattern_id < 0 || pattern_id >= engine->pattern_info.num_patterns) return -1;
-
-
-        return engine->pattern_info.pattern_offset[pattern_id];
+         return engine->pattern_info.patterns[pattern_id].cells[
+             row_id * engine->pattern_info.num_channels + channel_id
+        ].noteId;
     }
     
     int get_current_row(Engine* engine)
@@ -457,52 +416,148 @@ extern "C"
     {
         if (!engine) return -2;
 
-        return engine->pattern_info.cells[0].instrumentId;
+        return engine->pattern_info.patterns[0].cells[0].noteId;
     }
 
-    int set_note(Engine* engine, int noteId, int index)
+    int set_note(Engine* engine, int noteId, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
-
-        engine->pattern_info.cells[index].noteId = static_cast<uint8_t>(noteId);
+        
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+        
+        engine->pattern_info.set_note(pattern_id, channel_id, row_id, noteId);
 
         return 0;
     }
 
-    int set_instrument(Engine* engine, int instrumentId, int index)
+    int set_instrument(Engine* engine, int instrumentId, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
 
-        engine->pattern_info.cells[index].instrumentId = static_cast<uint8_t>(instrumentId);
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+
+        engine->pattern_info.set_instrument(pattern_id, channel_id, row_id, instrumentId);
 
         return 0;
     }
 
-    int set_volume(Engine* engine, int volume, int index)
+    int set_volume(Engine* engine, int volume, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
 
-        engine->pattern_info.cells[index].volume = static_cast<uint8_t>(volume);
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+
+        engine->pattern_info.set_volume(pattern_id, channel_id, row_id, volume);
 
         return 0;
     }
 
-    int set_effect(Engine* engine, int effect, int index)
+    int set_effect(Engine* engine, int effect, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
 
-        engine->pattern_info.cells[index].effect = static_cast<uint8_t>(effect);
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+
+        engine->pattern_info.set_effect(pattern_id, channel_id, row_id, effect);
 
         return 0;
     }
 
-    int set_param(Engine* engine, int param, int index)
+    int set_param(Engine* engine, int param, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
 
-        engine->pattern_info.cells[index].param = static_cast<uint8_t>(param);
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
+        if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
+
+        engine->pattern_info.set_param(pattern_id, channel_id, row_id, param);
 
         return 0;
+    }
+
+    int insert_order(Engine* engine, int position, int pattern_id)
+    {
+        if (!engine) return -2;
+
+        if (position < 0 || position >= MAX_ORDER || pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+
+        return engine->pattern_info.insert_order(position, pattern_id);
+    }
+
+    int remove_order(Engine* engine, int position)
+    {
+        if (!engine) return -2;
+
+        if (position < 0 || position >= MAX_ORDER) return -1;
+
+        return engine->pattern_info.remove_order(position);
+    }
+
+    int increase_channel_count(Engine* engine)
+    {
+        if (!engine) return -2;
+
+        if (engine->pattern_info.num_channels == MAX_CHANNELS) return -1;
+
+        return engine->pattern_info.resize_channel_count_by_two(true);
+    }
+
+    int decrease_channel_count(Engine* engine)
+    {
+        if (!engine) return -2;
+
+        if (engine->pattern_info.num_channels == 2) return -1;
+
+        return engine->pattern_info.resize_channel_count_by_two(false);
+    }
+
+    int increase_row_count(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(engine->pattern_info.patterns[pattern_id].num_rows == 256) return -1;
+
+        return engine->pattern_info.resize_row_by_one(pattern_id, true);
+    }
+
+    int decrease_row_count(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(engine->pattern_info.patterns[pattern_id].num_rows == 1) return -1;
+
+        return engine->pattern_info.resize_row_by_one(pattern_id, false);
+    }
+
+    int expand_pattern(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(engine->pattern_info.patterns[pattern_id].num_rows * 2 > 256) return -1;
+
+        return engine->pattern_info.expand_pattern(pattern_id);
+    }
+
+    int shrink_pattern(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+
+        if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+        if(engine->pattern_info.patterns[pattern_id].num_rows / 2 < 1) return -1;
+
+        return engine->pattern_info.shrink_pattern(pattern_id);
     }
 
     int get_bpm(Engine* engine) {
@@ -513,26 +568,3 @@ extern "C"
 
     //TODO: Finish WebAssembly functions
 }
-
-// int Engine::step(int frames)
-// {
-//     int is_hit = 0;
-
-//     int start_sample = current_samples;
-//     int end_sample = current_samples + frames;
-
-//     int start_tick = start_sample / samples_per_tick;
-//     int end_tick = (end_sample - 1) / samples_per_tick;
-
-//     if (end_tick / ticks_per_row > start_tick / ticks_per_row)
-//     {
-//         is_hit = 1;
-//         advance_row();
-        
-//     }
-
-//     current_samples = end_sample;
-//     current_ticks = end_tick;
-
-//     return is_hit;
-// }

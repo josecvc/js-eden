@@ -251,6 +251,24 @@ ${{
 
         const code = e.code;
 
+
+        const isFocused = root.lookup("gridFocus").value();
+        if (element.tagName.toLowerCase() == "canvas" && code == "Delete") {
+            e.preventDefault();
+        }
+
+        if (!isFocused) return;
+
+        root.lookup("deleteDirty").assign(true, root.scope);
+    })
+
+    addEventListener("keydown", (e) => {
+        const element = document.activeElement;
+
+        if(element.tagName.toLowerCase() == "textarea" || element.tagName.toLowerCase() == "input" || element.classList.contains("jseden-title")) return;
+
+        const code = e.code;
+
         const isFocused = root.lookup("gridFocus").value();
         if (element.tagName.toLowerCase() == "canvas" && (code == "ArrowUp" || code == "ArrowDown" || code == "ArrowLeft" || code == "ArrowRight")) {
             e.preventDefault();
@@ -1145,17 +1163,39 @@ action initUIevents {
             numOrders++;
             # dispatch to wasm
 
-            ${{root.lookup("engine_node").value().port.postMessage({type: "insert_order", value: root.lookup("currentPattern").value() - 1})}}$
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "insert_order",
+                    pos: root.lookup("currentOrder").value()
+                    patternId: root.lookup("currentPattern").value() - 1
+                })
+            }}$
         }
     }
 
-    when(keyboardRowFocus) {
-        currentRow is keyboardRowFocus;
+    when(orderinsert_click) {
+        if(numOrders > 0) {
+
+            numOrders--;
+            # dispatch to wasm
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "delete_order",
+                    pos: root.lookup("currentOrder").value()
+                    patternId: root.lookup("currentPattern").value() - 1
+                })
+            }}$
+        }
     }
 
-    when (keyboardChannelFocus) {
-        currentRow is keyboardRowFocus;
-        currentChannel is keyboardChannelFocus;
+    when(keyboardRowFocus + 1) {
+        currentRow = keyboardRowFocus;
+    }
+
+    when (keyboardChannelFocus + 1) {
+        currentRow = keyboardRowFocus;
+        currentChannel = keyboardChannelFocus;
     }
 
     when (keyboardElementFocus) {
@@ -1184,7 +1224,12 @@ action initUIevents {
         currentElement is keyboardElementFocus;
     }
 
-    
+    when(deleteDirty) {
+        # check the current element, remove from JS-EDEN array (set to -1)
+        # dispatch message to AWP and remove from WASM array
+        ${{console.log("Deleted!")}}$;
+        deleteDirty = false;
+    }
 }
 
 action config {
@@ -1306,12 +1351,13 @@ action ACTIVE {
 
     patternDirty = false;
     sampleDirty = true;
+    elementDirty = false;
+    deleteDirty = false;
 
     gridFocus = false;
     
     currentView = "grid";
-
-    elementDirty = false;
+    
     elementValue = 0;
 
     wasmReady = false;
@@ -1330,7 +1376,7 @@ action ACTIVE {
     is_playing is false;
     order = 0 with i is 1..255;
     keys = 0 with i is 0..119;
-    semitones = ["C‒", "C#", "D-", "D#", "E‒", "E#", "F‒", "F#", "G‒", "G#", "A-", "A#", "B"]
+    semitones = ["C‒", "C#", "D-", "D#", "E‒", "F‒", "F#", "G‒", "G#", "A-", "A#", "B-"]
     octave = 4;
 
     instrument_list = InstrumentList("instrument_list");

@@ -47,7 +47,11 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.emplaceEffect(msg);
             } else if (msg.type == "param_set") {
                 this.emplaceParam(msg);
-            } 
+            } else if (msg.type == "insert_order") {
+                this.insertOrder(msg);
+            } else if (msg.type == "delete_order") {
+                this.deleteOrder(msg);
+            }
         };
     }
 
@@ -231,6 +235,14 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     setPause(msg) {
         this.wasm.exports.stop_track(this.enginePtr);
+    }
+
+    insertOrder(msg) {
+        this.wasm.exports.insert_order(this.enginePtr, msg.pos, msg.patternId);
+    }
+
+    deleteOrder(msg) {
+        this.wasm.exports.delete_order(this.enginePtr, msg.pos);
     }
 
     process(ins, outs, parameters) {
