@@ -119,7 +119,6 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
 
     for (int i = 0; i < frames; i++)
     {   
-        // TODO: Add looping (forward, bidi)
         int p = static_cast<int>(voice.position);
 
         if (p >= voice.sample->length - 1) {
@@ -148,7 +147,7 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
             output[1][i] += R_out_lerp * voice.env_val * voice.volume;
         }
 
-        voice.position += voice.rate;
+        voice.position += (voice.backwards) ? -voice.rate : voice.rate;
 
         if (voice.sample->loop_type == LoopType::NONE) 
         {
@@ -159,22 +158,23 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
             }
         } else if (voice.sample->loop_type == LoopType::FORWARD)
         {
-            double overshoot = voice.position - voice.sample->loop_to;
-            voice.position = voice.sample->loop_from + overshoot;
+            if(voice.position >= voice.sample->loop_to) 
+            {
+                double overshoot = voice.position - voice.sample->loop_to;
+                voice.position = voice.sample->loop_from + overshoot;
+            }    
         } else if (voice.sample->loop_type == LoopType::BIDI)
         {
-            if (voice.backwards && voice.position <= voice.sample->loop_from) 
-            {
-                double overshoot = voice.position - voice.sample->loop_from;
-                voice.position = voice.sample->loop_from + overshoot;
-                voice.backwards = false;
-            }
-
             if (!voice.backwards && voice.position >= voice.sample->loop_to) 
             {
                 double overshoot = voice.position - voice.sample->loop_to;
-                voice.position = voice.sample->loop_to + overshoot;
+                voice.position = voice.sample->loop_to - overshoot;
                 voice.backwards = true;
+            } else if (voice.backwards && voice.position <= voice.sample->loop_from) 
+            {
+                double overshoot =voice.sample->loop_from - voice.position;
+                voice.position = voice.sample->loop_from + overshoot;
+                voice.backwards = false;
             }
         }
     }
