@@ -49,8 +49,24 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.emplaceParam(msg);
             } else if (msg.type == "insert_order") {
                 this.insertOrder(msg);
-            } else if (msg.type == "delete_order") {
-                this.deleteOrder(msg);
+            } else if (msg.type == "remove_order") {
+                this.removeOrder(msg);
+            } else if (msg.type == "increase_row_count") {
+                this.increaseRowCount(msg);
+            } else if (msg.type == "decrease_row_count") {
+                this.decreaseRowCount(msg);
+            } else if (msg.type == "increase_channel_count") {
+                this.increaseChannelCount(msg);
+            } else if (msg.type == "decrease_channel_count") {
+                this.decreaseChannelCount(msg);
+            } else if (msg.type == "expand_pattern") {
+                this.expandPattern(msg);
+            } else if (msg.type == "shrink_pattern") {
+                this.shrinkPattern(msg);
+            } else if (msg.type == "instrument_sample") {
+                this.setAsSample(msg);
+            } else if (msg.type == "instrument_synth") {
+                this.setAsSynth(msg);
             }
         };
     }
@@ -104,7 +120,7 @@ class MixerProcessor extends AudioWorkletProcessor {
                     this.enginePtr,
                     msg.sampleRate, 
                     msg.bpm, 
-                    msg.ticksPerRow,
+                    msg.ticksPerRow
                 );
 
                 this.sampleRate = msg.sampleRate;
@@ -191,23 +207,23 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     emplaceNote(msg) {
-        this.wasm.exports.set_note(this.enginePtr, msg.id, msg.calcIndex);
+        this.wasm.exports.set_note(this.enginePtr, msg.noteId, msg.patternId, msg.rowId, msg.channelId);
     }
 
     emplaceInstr(msg) {
-        this.wasm.exports.set_instrument(this.enginePtr, msg.id, msg.calcIndex);
+        this.wasm.exports.set_instrument(this.enginePtr, msg.instrumentId, msg.patternId, msg.rowId, msg.channelId);
     }
 
     emplaceVol(msg) {
-        this.wasm.exports.set_volume(this.enginePtr, msg.id, msg.calcIndex);
+        this.wasm.exports.set_volume(this.enginePtr, msg.volume, msg.patternId, msg.rowId, msg.channelId);
     }
     
     emplaceEffect(msg) {
-        this.wasm.exports.set_effect(this.enginePtr, msg.id, msg.calcIndex);
+        this.wasm.exports.set_effect(this.enginePtr, msg.effectId, msg.patternId, msg.rowId, msg.channelId);
     }
     
     emplaceParam(msg) {
-        this.wasm.exports.set_param(this.enginePtr, msg.id, msg.calcIndex);
+        this.wasm.exports.set_param(this.enginePtr, msg.param, msg.patternId, msg.rowId, msg.channelId);
     }
 
     playMidi(msg) {
@@ -241,8 +257,40 @@ class MixerProcessor extends AudioWorkletProcessor {
         this.wasm.exports.insert_order(this.enginePtr, msg.pos, msg.patternId);
     }
 
-    deleteOrder(msg) {
-        this.wasm.exports.delete_order(this.enginePtr, msg.pos);
+    removeOrder(msg) {
+        this.wasm.exports.remove_order(this.enginePtr, msg.pos);
+    }
+
+    increaseChannelCount(msg) {
+        this.wasm.exports.increase_channel_count(this.enginePtr);
+    }
+
+    decreaseChannelCount(msg) {
+        this.wasm.exports.decrease_channel_count(this.enginePtr);
+    }
+
+    increaseRowCount(msg) {
+        this.wasm.exports.increase_row_count(this.enginePtr, msg.patternId);
+    }
+
+    decreaseRowCount(msg) {
+        this.wasm.exports.decrease_row_count(this.enginePtr, msg.patternId);
+    }
+
+    expandPattern(msg) {
+        this.wasm.exports.expand_pattern(this.enginePtr, msg.patternId, msg.upDown);
+    }
+
+    shrinkPattern(msg) {
+        this.wasm.exports.shrink_pattern(this.enginePtr, msg.patternId);
+    }
+
+    setAsSample(msg) {
+        this.wasm.exports.set_instrument_sample(this.enginePtr, msg.instrumentId);
+    }
+
+    setAsSynth(msg) {
+        this.wasm.exports.set_instrument_synth(this.enginePtr, msg.instrumentId);
     }
 
     process(ins, outs, parameters) {
@@ -267,6 +315,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         outs[0][0].set(this.leftHeap);
         outs[0][1].set(this.rightHeap);
 
+        // give playback statistics to JS-EDEN
         Atomics.store(this.playbackArray, ROW, currRow);
         Atomics.store(this.playbackArray, PATTERN, currPattern);
         Atomics.store(this.playbackArray, ORDER, currOrder);

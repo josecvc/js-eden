@@ -10,8 +10,6 @@
 #include "pattern.h"
 #include "polyphony.h"
 
-using Instrument = std::variant<std::monostate, SynthInstrument, SampleInstrument>;
-
 class Engine
 {
 public:
@@ -51,8 +49,12 @@ public:
     
     // instruments
     int register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
-    void add_synth();
+    int register_synth();
+
     void remove_instrument(int instrument_id);
+    int switch_instrument_type(int instrument_id, InstrumentType type);
+
+    Sample* get_sample(Instrument& instrument, int note_id);
 
     // timing attributes
     int bpm;
@@ -69,11 +71,11 @@ public:
     short current_order;
     short current_pattern;
 
-    uint16_t* playback;
+    int sample_playheads[Polyphony::MAX_VOICES];
+    int instrument_playheads[MAX_INSTRUMENTS];
 
-    int instrument_count{0}; // use this to switch to Instrument[MAX_INSTRUMENTS]
+    int instrument_count{0};
     
-    // Pattern information
     PatternInfo pattern_info;
 
     // Channel data (last command used, channel audio information)
@@ -83,8 +85,6 @@ public:
     std::vector<std::shared_ptr<Sample>> sample_pool;
 
     Polyphony poly;
-    // Channel channels; maybe?? 
-    
 };
 
-#endif
+#endif 

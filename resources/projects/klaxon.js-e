@@ -25,11 +25,6 @@ ctx is initAudioContext();
 gain_node is initGainNode();
 engine_node is null; # this specifically is for holding the engine
 
-NUM_PATTERNS is 255;
-NUM_ROWS is 64;
-NUM_CHANNELS is 8;
-NUM_ORDERS is 255;
-
 samplePool = [];
 playbackArray = null;
 
@@ -255,11 +250,10 @@ ${{
         const isFocused = root.lookup("gridFocus").value();
         if (element.tagName.toLowerCase() == "canvas" && code == "Delete") {
             e.preventDefault();
+            if (!isFocused) return;
+
+            root.lookup("deleteDirty").assign(true, root.scope);
         }
-
-        if (!isFocused) return;
-
-        root.lookup("deleteDirty").assign(true, root.scope);
     })
 
     addEventListener("keydown", (e) => {
@@ -581,123 +575,221 @@ func int2char {
     }}$
 }
 
-func getPattern {
-    ${{
-        let pattern_id = arguments[0];
-        let num_channels = arguments[1];
-        console.log(`Getting Pattern ${pattern_id}...`);
-        const patternStart = root.lookup("patternOffset").value()[pattern_id];
-        const rows = root.lookup("patternRows").value()[pattern_id];
-
-        const patterns = root.lookup("patternArray").value();
-
-        const pattern = [];
-
-        const numElements = 5;
-
-        for(let r = 0; r < rows; r++) {
-            const row = []
-            for(let ch = 0; ch < num_channels; ch++) {
-                let idx = patternStart + (r * num_channels + ch) * numElements;
-                const noteId =   patterns[idx];
-                const instrId =  patterns[idx+1];
-                const volume =   patterns[idx+2];
-                const effectId = patterns[idx+3];
-                const param =    patterns[idx+4];
-
-                row.push([
-                    noteId,
-                    instrId,
-                    volume,
-                    effectId,
-                    param
-                ])
-            }
-
-            pattern.push(row);
-        }
-        
-        return pattern;
-    }}$
-}
-
 func setNote {
-    para id, idx, cell
+    para val, pattern, row, channel
     ${{
-        root.lookup("patternArray").value()[idx] = id;
-        root.lookup("engine_node").value().port.postMessage({type: "note_set", id: id, calcIndex: cell});
+        // in this pattern, in this row, in this channel at cell.noteId
+        root.lookup("patternArray").value()[pattern][row][channel][0] = val;
+        root.lookup("engine_node").value().port.postMessage({
+            type: "note_set", 
+            noteId: val,
+            patternId: pattern,
+            rowId: row,
+            channelId: channel 
+        });
     }}$
     patternDirty = true;
 }
 
 func setInstrument {
-    para id, idx, cell
+    para val, pattern, row, channel
     ${{
-        root.lookup("patternArray").value()[idx] = id;
-        root.lookup("engine_node").value().port.postMessage({type: "instr_set", id: id, calcIndex: cell});
+        // in this pattern, in this row, in this channel at cell.instrumentId
+        root.lookup("patternArray").value()[pattern][row][channel][1] = val;
+        root.lookup("engine_node").value().port.postMessage({
+            type: "instr_set", 
+            instrumentId: val,
+            patternId: pattern,
+            rowId: row,
+            channelId: channel 
+        });
     }}$
     patternDirty = true;
 }
 
 func setVolume {
-    para id, idx, cell
+    para val, pattern, row, channel
     ${{
-        root.lookup("patternArray").value()[idx] = id;
-        root.lookup("engine_node").value().port.postMessage({type: "vol_set", id: id, calcIndex: cell});
+        // in this pattern, in this row, in this channel at cell.volume
+        root.lookup("patternArray").value()[pattern][row][channel][2] = val;
+        root.lookup("engine_node").value().port.postMessage({
+            type: "vol_set", 
+            volume: val,
+            patternId: pattern,
+            rowId: row,
+            channelId: channel 
+        });
     }}$
     patternDirty = true;
 }
 
 func setEffect {
-    para id, idx, cell
+    para val, pattern, row, channel
     ${{
-        root.lookup("patternArray").value()[idx] = id;
-        root.lookup("engine_node").value().port.postMessage({type: "effect_set", id: id, calcIndex: cell});
+        // in this pattern, in this row, in this channel at cell.effectId
+        root.lookup("patternArray").value()[pattern][row][channel][3] = val;
+        root.lookup("engine_node").value().port.postMessage({
+            type: "effect_set", 
+            noteId: val,
+            patternId: pattern,
+            rowId: row,
+            channelId: channel 
+        });
     }}$
     patternDirty = true;
 }
 
 func setParam {
-    para id, idx, cell
+    para val, pattern, row, channel
     ${{
-        root.lookup("patternArray").value()[idx] = id;
-        root.lookup("engine_node").value().port.postMessage({type: "param_set", id: id, calcIndex: cell});
+        // in this pattern, in this row, in this channel at cell.param
+        root.lookup("patternArray").value()[pattern][row][channel][4] = val;
+        root.lookup("engine_node").value().port.postMessage({
+            type: "param_set", 
+            param: val,
+            patternId: pattern,
+            rowId: row,
+            channelId: channel 
+        });
     }}$
     patternDirty = true;
 }
 
 ## ROW/CHANNEL COUNT
 
-action add_channels {
-    # you're gonna have to free everything and reconstruct the samples properly
+action InsertOrder {
+    if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
+        if (patternOrder[currentOrder + 1] != 255) {
+            for(i = numOrders; i > currentOrder; i--) {
+                patternOrder[i] = patternOrder[i - 1];
+            }
+        }
+
+        patternOrder[currentOrder + 1] = currentPattern - 1;
+        numOrders++;
+    }
+}
+
+action DeleteOrder {
+    if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
+         for (i = position; i < numOrders; i++)
+        {  
+            patternOrder[i] = patternOrder[i + 1];
+        }
+
+        patternOrder[numOrders] = 255;
+        numOrders--;
+    }
+}
+
+action ResizeChannels {
+    ${{
+        // Can be Eden code but hangs the environment whenever I try
+
+        const upDown = root.lookup("upDown").value();
+        const oldCount = root.lookup("numChannels").value();
+        const newCount = upDown ? (oldCount + 2) : (oldCount - 2);
+        const MAX_CHANNELS = root.lookup("MAX_CHANNELS").value();
+        
+        if(newCount <= MAX_CHANNELS && newCount >= 2) {
+            const MAX_PATTERNS = root.lookup("MAX_PATTERNS").value();
+            const patternArray = root.lookup("patternArray").value();
+            const patternRows = root.lookup("patternRows").value();
+
+            const channelRide = Math.min(oldCount, newCount);
+            const empty = [0, 0, 0, 0, 0];
+
+            for(let p = 0; p < MAX_PATTERNS; p++) {
+                patternArray[p] = patternArray[p].map(row => {
+                    if (upDown) {
+                        return [...row, empty, empty];
+                    } else {
+                        return row.slice(0, newCount);
+                    }
+                });
+            }
+
+            root.lookup("numChannels").assign(newCount, root.scope);
+            root.lookup("patternDirty").assign(true, root.scope);
+        }
+    }}$
+}
+
+action ResizeRow {
+    tempPattern = patternArray[currentPattern];
+
+    oldCount = patternRows[currentPattern];
+    newCount = (oldCount + 1) if upDown else (oldCount - 1);
+
+    if(newCount > 0 && newCount <= MAX_ROWS) {
+        rowRide = min(oldCount, newCount);
+
+        newChannelCells = oneCell with ch is 1..numChannels;
+        newRowCells = newChannelCells with r is 1..newCount;
+
+        for(r = 1; r < rowRide + 1; r++) {
+            newRowCells[r][ch] = tempPattern[r][ch];
+        }
+
+        patternArray[currentPattern] = newRowCells;
+        patternRows[currentPattern] = newCount;
+    }
+}
+
+action ExpandPattern {
+    tempPattern = patternArray[currentPattern];
+
+    oldCount = patternRows[currentPattern];
+    newCount = patternRows[currentPattern] * 2;
+
+    if (newCount <= MAX_ROWS) {
+        newChannelCells = oneCell with ch is 1..numChannels;
+        newRowCells = newChannelCells with r is 1..newCount;
+
+        for(r = 1; r < oldCount + 1; r++) {
+            newRowCells[(r - 1) * 2 + 1] = tempPattern[r];
+        }
+
+        patternArray[currentPattern] = newRowCells;
+        patternRows[currentPattern] = newCount;
+    }
+}
+
+action ShrinkPattern {
+    tempPattern = patternArray[currentPattern];
+
+    oldCount = patternRows[currentPattern];
+    newCount = floor(patternRows[currentPattern] / 2);
+
+    if (newCount >= 1) {
+
+        newChannelCells = oneCell with ch is 1..numChannels;
+        newRowCells = newChannelCells with r is 1..newCount;
+
+        for(r = 1; r < oldCount + 1; r+=2) {
+            newRowCells[(r - 1) / 2 + 1] = tempPattern[r];
+        }
+
+        patternArray[currentPattern] = newRowCells;
+        patternRows[currentPattern] = newCount;
+    }
 }
 
 ## ACTIONS
 
-action MakeSampleEditor{
-
-    # grab waveform data and display it (we dont know how to)
-    # I guess we can just use tiny rectangles and blit them onto the screen according to the size
-    
-
-    sampleEditor is [];
-}
-
-action MakeInstrumentEditor{
-
-
-
-    instrEditor is [];
-}
-
-action makeui {
+action MakeUI {
 # Set up canvas
 createCanvas("PatternEditor", "editorCanvas", "Klaxon Tracker");
-patternFocus = getPattern(currentPattern - 1, numChannels);
+patternFocus = patternArray[currentPattern];
 
 mouseWheelEnabled = true;
+
 view_PatternEditor_width = 1193;
 view_PatternEditor_height = 843;
+
+viewportWidth is view_PatternEditor_width;
+viewportHeight is view_PatternEditor_height;
+
 view_PatternEditor_x = 295.5;
 view_PatternEditor_y = 8.5;
 
@@ -706,59 +798,68 @@ fontSize is 30 * scale;
 buttonSize is 30 * scale;
 
 # Cell Size
-cellWidth is view_PatternEditor_width/6 * scale;
-cellHeight is view_PatternEditor_height/24 * scale;
+cellWidth is viewportWidth/6 * scale;
+cellHeight is viewportHeight/24 * scale;
 
-gridOffset  is [40 - scrollHorz, view_PatternEditor_height/1.7 - (currentRow)*cellHeight]
-orderOffset is [view_PatternEditor_width/75, view_PatternEditor_height/16 -(currentOrder+1)*fontSize + cellHeight/2]
+gridOffset  is [40 - scrollHorz, viewportHeight/1.7 - (currentRow)*cellHeight]
+orderOffset is [viewportWidth/75, viewportHeight/16 -(currentOrder+1)*fontSize + cellHeight/2]
 instrOffset is [1, fontSize -(instrScroll)*fontSize];
 sampleOffset is [1, fontSize - (sampleScroll)*fontSize];
 
-
 # Covers
-topCover is Rectangle(0, 0, view_PatternEditor_width, view_PatternEditor_height/4, "#625353", "#000000"); # add gradient afterwards
-bottomCover is Rectangle(0, view_PatternEditor_height/4, view_PatternEditor_width, 3*view_PatternEditor_height/4 - view_PatternEditor_height/28, "#74747400", "#000000");
-channelRect is Rectangle(ch*cellWidth + gridOffset[1], view_PatternEditor_height/4 , cellWidth, 3*view_PatternEditor_height/4, "#00000000", "#000000") with ch is 0..(numChannels - 1);
-rowNoStrip is Rectangle(0, view_PatternEditor_height/4, 40, 3*view_PatternEditor_height/4, "white", "black");
+topCover is Rectangle(0, 0, viewportWidth, viewportHeight/4, "#625353", "#000000"); # add gradient afterwards
+bottomCover is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4 - viewportHeight/28, "#74747400", "#000000");
+channelRect is Rectangle(ch*cellWidth + gridOffset[1], viewportHeight/4 , cellWidth, 3*viewportHeight/4, "#00000000", "#000000") with ch is 0..(numChannels - 1);
+rowNoStrip is Rectangle(0, viewportHeight/4, 40, 3*viewportHeight/4, "white", "black");
 
-instrumentsBg is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
-samplesBg is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#784545", "#000000");
+instrumentsBg is Rectangle(viewportWidth/2, 0, viewportWidth/4, viewportHeight/4, "#784545", "#000000");
+samplesBg is Rectangle(3*viewportWidth/4, 0, viewportWidth/4, viewportHeight/4, "#784545", "#000000");
 
-orderBackground is Rectangle(0, 0, view_PatternEditor_width/12, view_PatternEditor_height/8, "#784545", "#000000");
-orderSeqSep is Rectangle(0, 0, view_PatternEditor_width/24, view_PatternEditor_height/8, "#00000000", "#000000");
-orderPatSep is Rectangle(view_PatternEditor_width/24, 0, view_PatternEditor_width/24, view_PatternEditor_height/8, "#00000000", "#000000");
+orderBackground is Rectangle(0, 0, viewportWidth/12, viewportHeight/8, "#784545", "#000000");
+orderSeqSep is Rectangle(0, 0, viewportWidth/24, viewportHeight/8, "#00000000", "#000000");
+orderPatSep is Rectangle(viewportWidth/24, 0, viewportWidth/24, viewportHeight/8, "#00000000", "#000000");
 
-instrSep is Rectangle(view_PatternEditor_width/2, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
-sampSep is Rectangle(3*view_PatternEditor_width/4, 0, view_PatternEditor_width/4, view_PatternEditor_height/4, "#00000000", "#000000");
+instrSep is Rectangle(viewportWidth/2, 0, viewportWidth/4, viewportHeight/4, "#00000000", "#000000");
+sampSep is Rectangle(3*viewportWidth/4, 0, viewportWidth/4, viewportHeight/4, "#00000000", "#000000");
 
 # Buttons
-playButton is Button("playbtn", "Play", 0, view_PatternEditor_height/8 + buttonSize, buttonSize * 4, buttonSize * 1.5);
-stopButton is Button("stopbtn", "Stop", 0, view_PatternEditor_height/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
+playButton is Button("playbtn", "Play", 0, viewportHeight/8 + buttonSize, buttonSize * 4, buttonSize * 1.5);
+stopButton is Button("stopbtn", "Stop", 0, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
-tempoPlusButton is Button("tempoplus",   "+", view_PatternEditor_width/4.5, view_PatternEditor_height/15      , buttonSize, buttonSize);
-tempoMinusButton is Button("tempominus", "-", view_PatternEditor_width/4.5 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
+tempoPlusButton is Button("tempoplus",   "+", viewportWidth/4.5, viewportHeight/15      , buttonSize, buttonSize);
+tempoMinusButton is Button("tempominus", "-", viewportWidth/4.5 + buttonSize, viewportHeight/15, buttonSize, buttonSize);
 
-speedPlusButton is Button("speedplus", "+", view_PatternEditor_width/4.5, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
-speedMinusButton is Button("speedminus", "-", view_PatternEditor_width/4.5 + buttonSize, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+speedPlusButton is Button("speedplus", "+", viewportWidth/4.5, viewportHeight/15 + buttonSize, buttonSize, buttonSize);
+speedMinusButton is Button("speedminus", "-", viewportWidth/4.5 + buttonSize, viewportHeight/15 + buttonSize, buttonSize, buttonSize);
 
-patternPlusButton is Button("patternplus", "+", view_PatternEditor_width/2.75, view_PatternEditor_height/15, buttonSize, buttonSize);
-patternMinusButton is Button("patternminus", "-", view_PatternEditor_width/2.75 + buttonSize, view_PatternEditor_height/15, buttonSize, buttonSize);
+patternPlusButton is Button("patternplus", "+", viewportWidth/2.75, viewportHeight/15, buttonSize, buttonSize);
+patternMinusButton is Button("patternminus", "-", viewportWidth/2.75 + buttonSize, viewportHeight/15, buttonSize, buttonSize);
 
-octavePlusButton is Button("octaveplus", "+", view_PatternEditor_width/2.75, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
-octaveMinusButton is Button("octaveminus", "-", view_PatternEditor_width/2.75 + buttonSize, view_PatternEditor_height/15 + buttonSize, buttonSize, buttonSize);
+octavePlusButton is Button("octaveplus", "+", viewportWidth/2.75, viewportHeight/15 + buttonSize, buttonSize, buttonSize);
+octaveMinusButton is Button("octaveminus", "-", viewportWidth/2.75 + buttonSize, viewportHeight/15 + buttonSize, buttonSize, buttonSize);
 
-orderInsertButton is Button("orderinsert", "Ins.", 0, view_PatternEditor_height/8, buttonSize*2, buttonSize);
-orderDelButton is Button("orderdelete", "Del.", buttonSize*2, view_PatternEditor_height/8, buttonSize*2, buttonSize);
+orderInsertButton is Button("orderinsert", "Ins.", 0, viewportHeight/8, buttonSize*2, buttonSize);
+orderDelButton is Button("orderdelete", "Del.", buttonSize*2, viewportHeight/8, buttonSize*2, buttonSize);
 
-sampleLoadButton is Button("sampleload", "Load", 3*view_PatternEditor_width/4 + fontSize*4, 0, buttonSize*2, buttonSize);
-sampleClearButton is Button("sampleclear", "Clear", 3*view_PatternEditor_width/4 + buttonSize*2 + fontSize*4, 0, buttonSize*2, buttonSize);
+sampleLoadButton is Button("sampleload", "Load", 3*viewportWidth/4 + fontSize*4, 0, buttonSize*2, buttonSize);
+sampleClearButton is Button("sampleclear", "Clear", 3*viewportWidth/4 + buttonSize*2 + fontSize*4, 0, buttonSize*2, buttonSize);
 
 stepPlusButton is Button("stepplus", "+");
 stepMinusButton is Button("stepminus", "-");
 
-sampleEditButton is Button("sampleedit", "Smp Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
+# PATTERN MUTATION BUTTONS
+expandButton is Button("expandpat", "Expand");
+shrinkButton is Button("shrinkpat", "Shrink");
 
-instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, view_PatternEditor_height/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
+addChanButton is Button("addchan", "Add");
+subChanButton is Button("subchan", "Sub");
+
+lenPlusButton is Button("lenplus", "+");
+lenMinusButton is Button("lenminus", "-");
+
+sampleEditButton is Button("sampleedit", "Smp Edit", buttonSize*4, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
+
+instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
 buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton, 
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
@@ -769,15 +870,15 @@ buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton,
 # Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
 
 # Information
-titleText is Text("KlaxonTracker", 3 * view_PatternEditor_width/16, 0, fontSize * 2, "white", "bold", Object("css_class_list", "klaxon-heading"));
-instrIndicator is Text("Instruments", view_PatternEditor_width/2, 0, fontSize, "white");
-sampleIndicator is Text("Samples", 3*view_PatternEditor_width/4, 0, fontSize, "white");
+titleText is Text("KlaxonTracker", 3 * viewportWidth/16, 0, fontSize * 2, "white", "bold", Object("css_class_list", "klaxon-heading"));
+instrIndicator is Text("Instruments", viewportWidth/2, 0, fontSize, "white");
+sampleIndicator is Text("Samples", 3*viewportWidth/4, 0, fontSize, "white");
 
-tempoText is Text("BPM  " + bpm, view_PatternEditor_width/8, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
-speedText is Text("SPD  " + ticksPerRow, view_PatternEditor_width/8, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
-patternIDTxt is Text("Pattern: " + (currentPattern - 1), view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14, fontSize, "white", "#CBE5D4");
+tempoText is Text("BPM  " + bpm, viewportWidth/8, viewportHeight/14, fontSize, "white", "#CBE5D4");
+speedText is Text("SPD  " + ticksPerRow, viewportWidth/8, viewportHeight/14 + fontSize, fontSize, "white", "#CBE5D4");
+patternIDTxt is Text("Pattern: " + (currentPattern - 1), viewportWidth/4 + buttonSize, viewportHeight/14, fontSize, "white", "#CBE5D4");
 
-octaveText is Text("Octave: " + octave, view_PatternEditor_width/4 + buttonSize, view_PatternEditor_height/14 + fontSize, fontSize, "white", "#CBE5D4");
+octaveText is Text("Octave: " + octave, viewportWidth/4 + buttonSize, viewportHeight/14 + fontSize, fontSize, "white", "#CBE5D4");
 stepText is Text("Step: " + step);
 
 information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator];
@@ -786,10 +887,10 @@ information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instr
 seqClassifier is "0" + s if(s < 10) else s;
 patClassifier is "0" + patternOrder[s+1] if (patternOrder[s+1] < 10) else patternOrder[s+1];
 
-orderCell is Rectangle(0, view_PatternEditor_height/16 - cellHeight/2, 2*cellWidth/3, cellHeight, "#c95757");
+orderCell is Rectangle(0, viewportHeight/16 - cellHeight/2, 2*cellWidth/3, cellHeight, "#c95757");
 
 seqNum  is Text(seqClassifier, 0 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
-patNum is Text(patClassifier, view_PatternEditor_width/28 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
+patNum is Text(patClassifier, viewportWidth/28 + orderOffset[1], s*fontSize + orderOffset[2], fontSize, "black" if s == currentOrder else "white") with s is 0..(numOrders - 1);
 
 orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSeqSep];
 
@@ -798,47 +899,54 @@ orderRender is [orderBackground, orderCell, seqNum, patNum, orderPatSep, orderSe
 # name, x, y, width, height, placeholder, maxlength, enabled
 # instrName is Textbox("instrument_" + s, 0, 0, 100, 100, "", 200, true, Object("background-color", "transparent")) with s is 1;
 
-instrNum is Text(s if ((s - 1)*fontSize + instrOffset[2] + fontSize < view_PatternEditor_height/4) else "", view_PatternEditor_width/2 + instrOffset[1], (s - 1)*fontSize + instrOffset[2], fontSize, "black" if s == currentInstrument else "white") with s is 1..128;
+instrNum is Text(s if ((s - 1)*fontSize + instrOffset[2] + fontSize < viewportHeight/4) else "", viewportWidth/2 + instrOffset[1], (s - 1)*fontSize + instrOffset[2], fontSize, "black" if s == currentInstrument else "white") with s is 1..128;
 
 # Instrument List Scrolling 
 
-instrumentScrollView is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/4, "#625353", "#ffffff");
+instrumentScrollView is Rectangle(3*viewportWidth/4 - viewportHeight/28, 0, viewportHeight/28, viewportHeight/4, "#625353", "#ffffff");
 
-topIScroll is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
-btmIScroll is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, view_PatternEditor_height/4 - view_PatternEditor_height/28, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+topIScroll is Rectangle(3*viewportWidth/4 - viewportHeight/28, 0, viewportHeight/28, viewportHeight/28, "#000000");
+btmIScroll is Rectangle(3*viewportWidth/4 - viewportHeight/28, viewportHeight/4 - viewportHeight/28, viewportHeight/28, viewportHeight/28, "#000000");
 
-instrumentScrollBar is Rectangle(3*view_PatternEditor_width/4 - view_PatternEditor_height/28, view_PatternEditor_height/28 + 
-    (instrScroll * fontSize)/(view_PatternEditor_height/4) * ((view_PatternEditor_height/4) / fontSize),  view_PatternEditor_height/28, (view_PatternEditor_width/4)/(128 * fontSize) * (view_PatternEditor_width/4 - 2*view_PatternEditor_height/28),"#c98585", "#000000");
+instrumentScrollBar is Rectangle(3*viewportWidth/4 - viewportHeight/28, viewportHeight/28 + 
+    (instrScroll * fontSize)/(viewportHeight/4) * ((viewportHeight/4) / fontSize),  viewportHeight/28, (viewportWidth/4)/(128 * fontSize) * (viewportWidth/4 - 2*viewportHeight/28),"#c98585", "#000000");
 
 instrumentScrollPort is [instrumentScrollView, topIScroll, btmIScroll, instrumentScrollBar];
 
 instrListRender is [instrumentsBg, instrNum, instrSep, instrName, instrumentScrollPort];
 
 # Sample List Rendering
-sampleNum is Text(s if (s*fontSize + sampleOffset[2] + fontSize < view_PatternEditor_height/4) else "", 3 * view_PatternEditor_width/4 + sampleOffset[1], s*fontSize + sampleOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+sampleNum is Text(s if (s*fontSize + sampleOffset[2] + fontSize < viewportHeight/4) else "", 3 * viewportWidth/4 + sampleOffset[1], s*fontSize + sampleOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
 sampleName is samplePool[s+1].filename if (s+1 <= samplePool.length) else "";
 
-sampleText is Text(sampleName if (s*fontSize + sampleOffset[2] < view_PatternEditor_height/4) else "", 3 * view_PatternEditor_width/4 + fontSize + sampleOffset[1], s*fontSize + instrOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+sampleText is Text(sampleName if (s*fontSize + sampleOffset[2] < viewportHeight/4) else "", 3 * viewportWidth/4 + fontSize + sampleOffset[1], s*fontSize + instrOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
 
 # Sample List Scrolling
 
-sampleScrollView is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/4, "#625353", "#ffffff");
+sampleScrollView is Rectangle(viewportWidth - viewportHeight/28, 0, viewportHeight/28, viewportHeight/4, "#625353", "#ffffff");
 
-topSScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, 0, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
-btmSScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height/4 - view_PatternEditor_height/28, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+topSScroll is Rectangle(viewportWidth - viewportHeight/28, 0, viewportHeight/28, viewportHeight/28, "#000000");
+btmSScroll is Rectangle(viewportWidth - viewportHeight/28, viewportHeight/4 - viewportHeight/28, viewportHeight/28, viewportHeight/28, "#000000");
 
-sampleScrollBar is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height/28 + 
-    (sampleScroll * fontSize)/(view_PatternEditor_height/4) * ((view_PatternEditor_height/4) / fontSize),  view_PatternEditor_height/28, (view_PatternEditor_height/4)/(16 * fontSize) * (view_PatternEditor_width/4 - 2*view_PatternEditor_height/28),"#c98585", "#000000");
+sampleScrollBar is Rectangle(viewportWidth - viewportHeight/28, viewportHeight/28 + 
+    (sampleScroll * fontSize)/(viewportHeight/4) * ((viewportHeight/4) / fontSize),  viewportHeight/28, (viewportHeight/4)/(16 * fontSize) * (viewportWidth/4 - 2*viewportHeight/28),"#c98585", "#000000");
 
 sampleScrollPort is [sampleScrollView, topSScroll, btmSScroll, sampleScrollBar];
 
 sampleListRender is [samplesBg, sampleNum, sampleText, sampleSep, sampleScrollPort]
 
+editorFocus is grid;
+
+# In render order
+editorCanvas is [bottomCover, editorFocus, topCover, orderRender, instrListRender, sampleListRender, information, buttons];
+}
+
+action MakeGrid {
 # Grid Rendering
-channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], view_PatternEditor_height/4 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
-rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..63
+channelIDTxt is Text(ch+1, ch * cellWidth + gridOffset[1], viewportHeight/4 + 5, 30, "black", "bold") with ch is 0..(numChannels - 1);
+rowNos is Text(r if r > 9 else "0" + r, 0*cellWidth, r*cellHeight + gridOffset[2], cellHeight, "black") with r is 0..(patternRows[currentPattern] - 1)
 gridCell is Rectangle(x*cellWidth + gridOffset[1], y*cellHeight + gridOffset[2], cellWidth, cellHeight, "#c7dbb0" if (y == currentRow) else "gray" if (y % 4 == 0) else "#dfdfdf", "#000000");
 
 # Cell Mutation
@@ -865,36 +973,102 @@ cellFocus is Rectangle(keyboardChannelFocus*cellWidth + keyboardElementFocus*cel
 gridBase is gridCell with x is 0..(numChannels - 1), y is 0..(patternRows[currentPattern] - 1);
 
 # GRID SCROLLING
-scrollView is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width, view_PatternEditor_height/28, "#625353", "#7f7f7f");
+scrollView is Rectangle(0, viewportHeight - viewportHeight/14, viewportWidth, viewportHeight/28, "#625353", "#7f7f7f");
 
-leftHorzScroll is Rectangle(0, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
-rightHorzScroll is Rectangle(view_PatternEditor_width - view_PatternEditor_height/28, view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_height/28, view_PatternEditor_height/28, "#000000");
+leftHorzScroll is Rectangle(0, viewportHeight - viewportHeight/14, viewportHeight/28, viewportHeight/28, "#000000");
+rightHorzScroll is Rectangle(viewportWidth - viewportHeight/28, viewportHeight - viewportHeight/14, viewportHeight/28, viewportHeight/28, "#000000");
 
-scrollBar is Rectangle(view_PatternEditor_height/28 + 
-    (currentElement/5 * cellWidth + currentChannel * cellWidth)/(view_PatternEditor_width) * (view_PatternEditor_width/cellWidth * 5) , view_PatternEditor_height - view_PatternEditor_height/14, view_PatternEditor_width/(numChannels*cellWidth + 40) * (view_PatternEditor_width - 2*view_PatternEditor_height/28), view_PatternEditor_height/28,"#c98585", "#000000");
+scrollBar is Rectangle(viewportHeight/28 + 
+    (currentElement/5 * cellWidth + currentChannel * cellWidth)/(viewportWidth) * (viewportWidth/cellWidth * 5) , viewportHeight - viewportHeight/14, viewportWidth/(numChannels*cellWidth + 40) * (viewportWidth - 2*viewportHeight/28), viewportHeight/28,"#c98585", "#000000");
 
 gridHorzScroll is [scrollView, scrollBar, leftHorzScroll, rightHorzScroll];
 
 grid is [gridBase, cellFocus, noteText, instrText, volText, effectText, paramText, channelIDTxt, channelRect,  rowNoStrip, rowNos, gridHorzScroll];
-
-# In render order
-editorCanvas is [bottomCover, grid, topCover, orderRender, instrListRender, sampleListRender, information, buttons];
 }
 
-action initUIevents {
+action MakeSampleEditor {
+# grab waveform data and display it (we dont know how to)
+# I guess we can just use tiny rectangles and blit them onto the screen according to the size
+
+sampleBackground is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4, "#424242");
+waveformBackground is Rectangle(0, viewportHeight/4 + 40, viewportWidth, 3*viewportHeight/4 / 1.5, "#000000");
+waveformMid is Line(0, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, viewportWidth, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, "#FFFFFF")
+
+sampleEditor is [sampleBackground, waveformBackground, waveformMid];
+}
+
+action MakeInstrumentEditor {
+
+keyScrollHorz = 0;
+pianoScrollView is Rectangle(0, viewportHeight - viewportHeight/14, viewportWidth, viewportHeight/28, "#625353", "#7f7f7f");
+
+leftPianoScroll is Rectangle(0, viewportHeight - viewportHeight/14, viewportHeight/28, viewportHeight/28, "#000000");
+rightPianoScroll is Rectangle(viewportWidth - viewportHeight/28, viewportHeight - viewportHeight/14, viewportHeight/28, viewportHeight/28, "#000000");
+
+pianoScrollBar is Rectangle(viewportHeight/28 + keyScrollHorz, viewportHeight - viewportHeight/14, viewportWidth/(keyWidth * 7 * numOctaves) * (viewportWidth - 2*viewportHeight/28), viewportHeight/28,"#c98585", "#000000");
+
+pianoScroll is [pianoScrollView, pianoScrollBar, leftPianoScroll, rightPianoScroll];
+
+
+keyOffset is [-keyScrollHorz, 0];
+
+instrumentBackground is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4, "#424242");
+envelopeBackground is Rectangle(40, viewportHeight/4 + 40, viewportWidth / 1.5, 3*viewportHeight/4 / 1.5, "#000000");
+
+# KEYS
+numOctaves = 8;
+keyWidth = 27;
+blackKeyWidth = (3/4) * keyWidth;
+keyHeight = 100;
+
+whiteKeys is Rectangle(keyOffset[1] + keyWidth*k + keyWidth*7*octave, viewportHeight - keyHeight*1.55, keyWidth, keyHeight, "#FFFFFF", "#000000") with k is 0..6;
+leftBlackKeys is Rectangle(keyOffset[1] + (keyWidth/2 + blackKeyWidth)/2 + keyWidth*k + keyWidth*7*octave, viewportHeight - keyHeight*1.55, blackKeyWidth, keyHeight/2, "#000000", "#101010") with k is 0..1;
+
+rightBlackKeys is Rectangle(keyOffset[1] + (keyWidth/2 + blackKeyWidth)/2 + keyWidth*k + keyWidth*7*octave, viewportHeight - keyHeight*1.55, blackKeyWidth, keyHeight/2, "#000000", "#101010") with k is 3..5;
+
+pianoKeys is [whiteKeys, leftBlackKeys, rightBlackKeys];
+octaves is pianoKeys with octave is 0..7;
+
+# ENVELOPE OPTIONS
+onCheck is Checkbox("envelope_on", "On", viewportWidth/1.5 + 40, viewportHeight/4 + 40 + buttonSize * 2, false);
+sustainCheck is Checkbox("envelope_on", "On", viewportWidth/1.5 + 40, viewportHeight/4 + 40 + buttonSize * 2, false);
+
+sustainText is Text("Point" + instruments[currentInstrument].sustain);
+loopFromText is Text("Start" + instruments[currentInstrument].loopFrom);
+loopToText is Text("End" + instruments[currentInstrument].loopTo);
+
+# ENVELOPE BUTTONS
+sustainPlusButton is Button("sustainplus", "+");
+sustainPlusButton is Button("sustainplus", "-");
+
+loopFromPlusButton is Button("loopfromminus", "+");
+loopFromMinusButton is Button("loopfromplus", "-");
+
+loopToPlusButton is Button("looptoplus", "+");
+loopToMinusButton is Button("looptominus", "-");
+
+addButton is Button("add_point", "Add", 40 + viewportWidth/1.5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
+deleteButton is Button("delete_point", "Del", 40 + viewportWidth/1.5 + buttonSize * 5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
+
+instrumentButtons is [addButton, deleteButton];
+
+instrEditor is [instrumentBackground, envelopeBackground, instrumentButtons, octaves, onCheck, pianoScroll];
+}
+
+action InitUIEvents {
     mouseHoverRow is floor((mouseY - gridOffset[2])/cellHeight);
     mouseHoverChannel is floor((mouseX - gridOffset[1])/cellWidth);
 
     mouseHoverInstrumentList is floor((mouseY - instrOffset[2])/fontSize);
     mouseHoverSampleList is floor((mouseY - sampleOffset[2])/fontSize);
 
-    mouseOverInstrument is (mouseHoverInstrumentList >= 0 && mouseHoverInstrumentList <= 127 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4 && mouseY < view_PatternEditor_height/4);
+    mouseOverInstrument is (mouseHoverInstrumentList >= 0 && mouseHoverInstrumentList <= 127 && mouseX >= viewportWidth/2 && mouseX < 3*viewportWidth/4 && mouseY < viewportHeight/4);
 
-    mouseOverSample is (mouseHoverSampleList >= 0 && mouseHoverSampleList <= 127 && mouseX >= 3 * view_PatternEditor_width/4 && mouseX <= view_PatternEditor_width && mouseY < view_PatternEditor_height/4);
+    mouseOverSample is (mouseHoverSampleList >= 0 && mouseHoverSampleList <= 127 && mouseX >= 3 * viewportWidth/4 && mouseX <= viewportWidth && mouseY < viewportHeight/4);
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= view_PatternEditor_height/4);
+    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= viewportHeight/4);
 
     cellScroll = false;
 
@@ -925,8 +1099,7 @@ action initUIevents {
     }
 
     when(mouseWheel) {
-        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/4) {
-            ${{console.log("Scrolling...")}}$
+        if(!mousePressed || !mouseOverCell && mouseY >= viewportHeight/4 && currentView == "grid") {
             if(mouseWheelVelocity > 0 && currentRow < patternRows[currentPattern] - 1) {
                 currentRow++; # change this to be an independent scroll
             } else if (mouseWheelVelocity < 0 && currentRow > 0) {
@@ -934,8 +1107,7 @@ action initUIevents {
             }
         }
 
-        if(!mousePressed || !mouseOverCell && mouseY < view_PatternEditor_height/4 && mouseX >= view_PatternEditor_width/2 && mouseX < 3*view_PatternEditor_width/4) {
-            ${{console.log("Scrolling through instrument list")}}$
+        if(!mousePressed || !mouseOverCell && mouseY < viewportHeight/4 && mouseX >= viewportWidth/2 && mouseX < 3*viewportWidth/4) {
             if(mouseWheelVelocity > 0 && instrScroll < 128) {
                 instrScroll++; # change this to be an independent scroll
             } else if (mouseWheelVelocity < 0 && instrScroll > 0) {
@@ -943,9 +1115,7 @@ action initUIevents {
             }
         }
 
-        if(!mousePressed || !mouseOverCell && mouseY < view_PatternEditor_height/4 && mouseX >= 3*view_PatternEditor_width/4 && mouseX < view_PatternEditor_width) {
-            ${{console.log("Scrolling through sample list")}}$
-
+        if(!mousePressed || !mouseOverCell && mouseY < viewportHeight/4 && mouseX >= 3*viewportWidth/4 && mouseX < viewportWidth) {
             if(mouseWheelVelocity > 0 && sampleScroll < 16) {
                 sampleScroll++; # change this to be an independent scroll
             } else if (mouseWheelVelocity < 0 && sampleScroll > 0) {
@@ -955,26 +1125,35 @@ action initUIevents {
     }
 
     when(touchPanX) {
-        if(!mousePressed || !mouseOverCell && mouseY >= view_PatternEditor_height/4) {
+        if(!mousePressed || !mouseOverCell && mouseY >= viewportHeight/4 && currentView == "grid") {
             if(touchPanXSpeed > 0 && scrollHorz < 16) {
                 scrollHorz += cellWidth;
             } else if (touchPanXSpeed < 0 && scrollHorz > 0) {
                 scrollHorz-= cellWidth;
             }
         }
+
+        if(!mousePressed && mouseY >= viewportHeight/4 && currentView == "instrument") {
+            if(touchPanXSpeed > 0 && keyScrollHorz < 7 * numOctaves * keyWidth - viewportWidth) {
+                keyScrollHorz += keyWidth;
+            } else if (touchPanXSpeed < 0 && keyScrollHorz > 0) {
+                keyScrollHorz-= keyWidth;
+
+                if (keyScrollHorz < 0) {
+                    keyScrollHorz = 0;
+                }
+            }
+        }
     }
 
     when(elementDirty) {
-        idx = patternOffset[currentPattern] +  (currentRow * numChannels + currentChannel) * 5 + 1; # 1-indexed
-        cellIdx = patternOffset[currentPattern] + currentRow * numChannels + currentChannel;
         if(currentElement == 0) { # note
-            setNote(elementValue, idx - 1 + 0, cellIdx);
+            setNote(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
 
-            if(patternArray[idx + 1] == 0) {
-                setInstrument(currentInstrument, idx - 1 + 1, cellIdx); # also set current instrument
-            }
+            setInstrument(currentInstrument, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            setVolume(100, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         } else if (currentElement == 1) { # instrument
-            temp = patternArray[idx + 1];
+            temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
 
             temp = temp * 10 + elementValue;
 
@@ -988,11 +1167,9 @@ action initUIevents {
                 }
             }
 
-            ${{console.log(root.lookup("temp").value())}}$
-
-            setInstrument(temp, idx - 1 + 1, cellIdx);
+            setInstrument(temp, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         } else if (currentElement == 2) { # volume
-            temp = patternArray[idx + 2];
+            temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
 
             temp = temp * 10 + elementValue;
 
@@ -1006,45 +1183,43 @@ action initUIevents {
                 }
             }
 
-            setVolume(temp, idx - 1 + 2, cellIdx);
+            setVolume(temp, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         } else if (elementFocus == 3) { # effect
-            temp = patternArray[idx + 3];
-            
-            if(mouseWheelVelocity < 0 && temp < 26) {
-                temp = temp + 1;
-            } else if (mouseWheelVelocity > 0 && temp > 0) {
-                temp = temp - 1;  
-            }
-
-            setEffect(temp, idx - 1 + 3, cellIdx);
+            setEffect(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         } else if (elementFocus == 4) { # param
-            temp = patternArray[idx + 4];
-            
-            if(mouseWheelVelocity < 0 && temp < 255) {
-                temp = temp + 1;
-            } else if (mouseWheelVelocity > 0 && temp > 0) {
-                temp = temp - 1;  
+           temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
+
+            temp = temp * 10 + elementValue;
+
+            if(temp > 100) {
+                while(temp > 100) {
+                    digits = floor(log(temp)); # base 10 approximates number of digits
+
+                    power_ten = pow(10, digits);
+
+                    temp = temp % power_ten;
+                }
             }
 
-            setParam(temp, idx - 1 + 4, cellIdx);
+            setParam(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         }
 
         currentRow = (currentRow + step) % patternRows[currentPattern];
     }
 
     when(currentPattern) {
-        patternFocus = getPattern(currentPattern - 1, numChannels);
+        patternFocus = patternArray[currentPattern];
     }
 
     when(patternDirty) {
         if(patternDirty) {
-            patternFocus = getPattern(currentPattern - 1, numChannels);
+            patternFocus = patternArray[currentPattern];
             patternDirty = false;
         }
     }
 
     when(currentRow) {
-        patternFocus = getPattern(currentPattern - 1, numChannels);
+        patternFocus = patternArray[currentPattern];
     }
 
     # button states
@@ -1166,14 +1341,14 @@ action initUIevents {
             ${{
                 root.lookup("engine_node").value().port.postMessage({
                     type: "insert_order",
-                    pos: root.lookup("currentOrder").value()
+                    pos: root.lookup("currentOrder").value(),
                     patternId: root.lookup("currentPattern").value() - 1
-                })
+                });
             }}$
         }
     }
 
-    when(orderinsert_click) {
+    when(orderdelete_click) {
         if(numOrders > 0) {
 
             numOrders--;
@@ -1186,6 +1361,32 @@ action initUIevents {
                     patternId: root.lookup("currentPattern").value() - 1
                 })
             }}$
+        }
+    }
+
+    when(sampleedit_click) {
+        if (currentView == "sample") {
+            currentView = "grid"
+        } else {
+            currentView = "sample"
+        }
+    }
+
+    when(instrumentedit_click) {
+        if (currentView == "instrument") {
+            currentView = "grid"
+        } else {
+            currentView = "instrument"
+        }
+    }
+
+    when(currentView) {
+        if (currentView == "grid") {
+            editorFocus is grid;
+        } else if (currentView == "sample") {
+            editorFocus is sampleEditor;
+        } else if (currentView == "instrument") {
+            editorFocus is instrEditor;
         }
     }
 
@@ -1205,11 +1406,11 @@ action initUIevents {
         cellRight = cellLeft + (cellWidth / 5);
 
         viewportLeft  = scrollHorz;
-        viewportRight = scrollHorz + view_PatternEditor_width;
+        viewportRight = scrollHorz + viewportWidth;
 
 
         if (cellRight + 40 > viewportRight) {
-            scrollHorz = (cellRight + 40) - view_PatternEditor_width;
+            scrollHorz = (cellRight + 40) - viewportWidth;
         }
 
         if (cellLeft < 40) {
@@ -1247,20 +1448,15 @@ currentInstrument = 1; # used for midi playback and drawing on grid, will have z
 is_playing is false;
 }
 
-action makepattern {
-    size = NUM_PATTERNS * NUM_ROWS * NUM_CHANNELS * 5;
-    patternArray = 0 with i is 1..size;
+action MakePatterns {
+    oneCell = [0, 0, 0, 0, 0];
+
+    channelCells = oneCell with ch is 1..NUM_CHANNELS;
+    rowCells = channelCells with r is 1..NUM_ROWS;
+    patternArray = rowCells with i is 1..NUM_PATTERNS;
+
     patternOrder = 255 with i is 1..NUM_ORDERS;
-    patternRows = 64 with i is 1..NUM_PATTERNS;
-
-    offset = 0;
-
-    patternOffset = 0 with i is 1..NUM_PATTERNS;
-    
-    for(i=1;i<NUM_PATTERNS+1;i++) {
-        patternOffset[i] = offset;
-        offset = patternOffset[i] + patternRows[i];
-    }
+    patternRows = NUM_ROWS with i is 1..NUM_PATTERNS;
 
     patternOrder[1] = 0;
 }
@@ -1286,7 +1482,7 @@ action timing {
 }
 
 
-action setuplisteners {
+action SetupListeners {
 ${{
     root.lookup("is_playing").addJSObserver("playback_state", (obs, state) => {
         if(state) {
@@ -1305,11 +1501,14 @@ ${{
 
 action start {
     when(wasmReady) {
-        do :project > makepattern;
-        do :project > makeui;
-        do :project > initUIevents;
-        do :project > setuplisteners;
-        do :project > timing;
+        do :project > MakePatterns;
+        do :project > MakeUI;
+        do :project > MakeGrid;
+        do :project > MakeInstrumentEditor;
+        do :project > MakeSampleEditor;
+        do :project > InitUIEvents;
+        do :project > SetupListeners;
+        do :project > Timing;
     }
 }
 
@@ -1327,9 +1526,24 @@ action ACTIVE {
     view_myscript_current = 0;
     jseden_project_title = "Klaxon";
 
+    # constants
     MAX_PATTERNS = 255;
     MAX_CHANNELS = 127;
     MAX_ROWS = 256;
+
+    NUM_PATTERNS = 255;
+    NUM_ROWS = 64;
+    NUM_CHANNELS = 8;
+    NUM_ORDERS = 255;
+
+    NOTE_ID = 1;
+    INSTRUMENT_ID = 2;
+    VOLUME = 3;
+    EFFECT_ID = 4;
+    PARAM = 5;
+
+    # observables
+    masterVolume = 100;
 
     bpm = 140;
     ticksPerRow = 6;
@@ -1370,6 +1584,9 @@ action ACTIVE {
     scrollVert = 0;
     instrScroll = 0;
     sampleScroll = 0;
+    orderScroll = 0;
+
+    upDown = false;
 
     step = 0;
 

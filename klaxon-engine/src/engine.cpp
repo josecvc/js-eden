@@ -1,11 +1,7 @@
 #include "engine.h"
 #include "pattern.h"
 
-void Engine::init(
-        int sample_rate, 
-        int bpm, 
-        int ticks_per_row
-    )
+void Engine::init(int sample_rate, int bpm, int ticks_per_row)
 {
     this->sample_rate = sample_rate;
     this->bpm = bpm;
@@ -18,6 +14,17 @@ void Engine::init(
     this->current_row = 0;
     this->current_pattern = 0;
     this->current_order = 0;
+}
+
+Sample* Engine::get_sample(Instrument& inst, int note_id)
+{
+    if (note_id < 0 || note_id > 119) return nullptr;
+
+    if (inst.type != InstrumentType::SAMPLE) return nullptr;
+
+    int sample_id = inst.sample.note_sample[note_id];
+
+    return sample_pool[sample_id].get();
 }
 
 int Engine::process(float** output, int frames)
@@ -46,24 +53,9 @@ void Engine::mix_instruments(float** output, int frames)
         if (poly.voices[v].finished)
             poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id, poly.voices[v].instrument_id);
         if(!poly.voices[v].active) continue;
-        
-        std::visit([&](auto& i) {
-            using T = std::decay_t<decltype(i)>;
-
-            if constexpr (std::is_same_v<T, SampleInstrument>) {
-                int note_id = poly.voices[v].note_id;
-                int sample_id = i.note_sample[note_id];
-
-                if (sample_id < 0 || sample_id >= sample_pool.size()) return;
-
-                const auto& sample = sample_pool[sample_id].get();
-                i.render(output, frames, poly.voices[v], sample);
-            } else if constexpr (std::is_same_v<T, SynthInstrument>) {
-                // Synth generates its own waveform
-                i.render(output, frames, poly.voices[v]);
-            }
-        }, instruments[poly.voices[v].instrument_id]);
     }
+
+    poly.render_voices(output, frames);
 }
 
 void Engine::clear(float** output, int frames)
@@ -74,7 +66,6 @@ void Engine::clear(float** output, int frames)
         output[1][i] = 0;
     }
 }
-
 
 int Engine::step(int frames)
 {
@@ -106,6 +97,8 @@ void Engine::advance_tick()
     if (row_tick == 0) {
         advance_row();
     }
+
+    poly.advance_env_tick();
 }
 
 void Engine::process_row()
@@ -124,7 +117,13 @@ void Engine::process_row()
 
         // channels are 1-indexed (MIDI is taking channel 0)
         // instruments are 1-indexed (0 means no instrument in cell)
-        poly.add_voice(ch + 1, cell.noteId, cell.instrumentId - 1, cell.volume, 72); // "72" needs to be changed afterwards
+
+        auto& inst = instruments[cell.instrumentId - 1];
+        if(inst.type == InstrumentType::NONE) continue;
+
+        Sample* smp = get_sample(inst, cell.noteId);
+
+        poly.add_voice(&inst, smp, ch + 1, cell.noteId, cell.instrumentId - 1, cell.volume, 72); // "72" needs to be changed afterwards
     }
 }
 
@@ -132,10 +131,9 @@ void Engine::advance_row()
 {   
     process_row();
     current_row++;
-    if (current_row >= MAX_ROWS) { // 0 -> (MAX_ROWS - 1)
+    if (current_row >= this->pattern_info.patterns[this->current_pattern].num_rows) { // 0 -> (current num_rows - 1)
         current_row = 0;
-        
-
+    
         if(++current_order >= pattern_info.num_orders) {
             is_playing = false;
             current_order = 0;
@@ -154,10 +152,6 @@ void Engine::process_effects(int row_tick)
 
 void Engine::play(int order_num, int row_num)
 {   
-    int apparent_samples = samples_per_tick * ticks_per_row * row_num + MAX_ROWS * samples_per_tick * ticks_per_row * order_num;
-    if (apparent_samples != current_samples) 
-        current_samples = apparent_samples;
-
     is_playing = true;
 
     current_order = order_num;
@@ -216,22 +210,37 @@ int Engine::register_sample(const char* filename, float* left, float* right, int
 
     for (int i = 0; i < MAX_INSTRUMENTS; i++)
     {
-        if (std::holds_alternative<std::monostate>(instruments[i]))
+        if (instruments[i].type == InstrumentType::NONE)
         {
-            instruments[i] = SampleInstrument();
+            instruments[i].sample = SampleInstrument();
+            instruments[i].type = InstrumentType::SAMPLE;
             instrument_count++;
             id = i;
             break;
         }
     }
 
-    auto& inst = instruments[id];
-
-    if (auto sample_inst = std::get_if<SampleInstrument>(&inst))
+    for (int n = 0; n < SampleInstrument::MAX_NOTES; n++)
     {
-        for (int n = 0; n < SampleInstrument::MAX_NOTES; n++)
+        instruments[id].sample.note_sample[n] = sample_id;
+    }
+
+    return id;
+}
+
+int Engine::register_synth()
+{
+    int id = 0;
+
+    for (int i = 0; i < MAX_INSTRUMENTS; i++)
+    {
+        if (instruments[i].type == InstrumentType::NONE)
         {
-            sample_inst->note_sample[n] = sample_id;
+            instruments[i].synth = SynthInstrument();
+            instruments[i].type = InstrumentType::SYNTH;
+            instrument_count++;
+            id = i;
+            break;
         }
     }
 
@@ -240,24 +249,34 @@ int Engine::register_sample(const char* filename, float* left, float* right, int
 
 void Engine::remove_instrument(int instrument_id)
 {
-    if(instrument_id < 0 && instrument_id >= MAX_INSTRUMENTS)
+    if(instrument_id < 0 || instrument_id >= MAX_INSTRUMENTS)
         return;
+
+    instruments[instrument_id].type = InstrumentType::NONE;
+
+    instrument_count--;
+}
+
+int Engine::switch_instrument_type(int instrument_id, InstrumentType new_type)
+{
+    if (instrument_id < 0 || instrument_id >= MAX_INSTRUMENTS) return -1;
 
     auto& inst = instruments[instrument_id];
 
-    if (auto sampleInst = std::get_if<SampleInstrument>(&inst))
+    if (inst.type == new_type) return instrument_id;
+
+    if (new_type == InstrumentType::SAMPLE || new_type == InstrumentType::SYNTH)
     {
-        for (int note = 0; note < SampleInstrument::MAX_NOTES; note++)
-        {
-            if (sampleInst->note_sample[note] == instrument_id)
-            {
-                sampleInst->note_sample[note] = -1;
-            }
-        }
+        inst.type = new_type;
     }
 
-    inst = std::monostate{};
-    instrument_count--;
+    for (Voice& voice : poly.voices)
+    {
+        if (voice.active && voice.instrument_id == instrument_id)
+            voice.finished = true;
+    }
+
+    return instrument_id;
 }
 
 /**
@@ -341,7 +360,13 @@ extern "C"
     {
         if (!engine) return -2;
         if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
-        engine->poly.add_voice(0, note_id, instrument_id - 1, 1.0f, 72);
+
+        auto& inst = engine->instruments[instrument_id - 1];
+        if(inst.type == InstrumentType::NONE) return -1;
+
+        Sample* smp = engine->get_sample(inst, note_id);
+
+        engine->poly.add_voice(&inst, smp, 0, note_id, instrument_id - 1, 100.f, 72);
 
         return 0;
     }
@@ -432,7 +457,7 @@ extern "C"
         return 0;
     }
 
-    int set_instrument(Engine* engine, int instrumentId, int pattern_id, int row_id, int channel_id)
+    int set_instrument(Engine* engine, int instrument_id, int pattern_id, int row_id, int channel_id)
     {
         if (!engine) return -2;
 
@@ -440,7 +465,7 @@ extern "C"
         if(row_id < 0 || row_id >= engine->pattern_info.patterns[pattern_id].num_rows) return -1;
         if(channel_id < 0 || channel_id >= engine->pattern_info.num_channels) return -1;
 
-        engine->pattern_info.set_instrument(pattern_id, channel_id, row_id, instrumentId);
+        engine->pattern_info.set_instrument(pattern_id, channel_id, row_id, instrument_id);
 
         return 0;
     }
@@ -482,6 +507,24 @@ extern "C"
         engine->pattern_info.set_param(pattern_id, channel_id, row_id, param);
 
         return 0;
+    }
+
+    int set_instrument_sample(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= Engine::MAX_INSTRUMENTS) return -1;
+
+        
+        return engine->switch_instrument_type(instrument_id, InstrumentType::SAMPLE);
+    }
+
+    int set_instrument_synth(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= Engine::MAX_INSTRUMENTS) return -1;
+
+        
+        return engine->switch_instrument_type(instrument_id, InstrumentType::SYNTH);
     }
 
     int insert_order(Engine* engine, int position, int pattern_id)
@@ -545,7 +588,7 @@ extern "C"
         if (!engine) return -2;
 
         if(pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
-        if(engine->pattern_info.patterns[pattern_id].num_rows * 2 > 256) return -1;
+        if(engine->pattern_info.patterns[pattern_id].num_rows * 2 > MAX_PATTERNS) return -1;
 
         return engine->pattern_info.expand_pattern(pattern_id);
     }

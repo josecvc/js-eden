@@ -7,13 +7,18 @@
 void WaveTable::init(float sample_rate)
 {
     this->sample_rate = sample_rate;
+
+    generate_sine();
+    generate_saw();
+    generate_triangle();
+    generate_square();
 }
 
 void WaveTable::generate_sine() 
 {
     for(int i=0; i < WAVETABLE_SIZE; i++)
     {
-        this->table[i] = sinf(2.0f * M_PI * i / WAVETABLE_SIZE);
+        this->table[static_cast<int>(Waveform::SINE)][i] = sinf(2.0f * M_PI * i / WAVETABLE_SIZE);
     }
 }
 
@@ -21,41 +26,36 @@ void WaveTable::generate_saw()
 {
     for(int i=0; i < WAVETABLE_SIZE; i++)
     {  
-        float periodPart = static_cast<float>(i) / WAVETABLE_SIZE;
-        this->table[i] = periodPart * 2 - 1;
+        float period_part = static_cast<float>(i) / WAVETABLE_SIZE;
+        this->table[static_cast<int>(Waveform::SAW)][i] = period_part * 2 - 1;
     }
 }
 
-// extern "C" {
+void WaveTable::generate_triangle()
+{
+    for(int i = 0; i < WAVETABLE_SIZE; i++)
+    {
+        float period_part = static_cast<float>(i) / WAVETABLE_SIZE;
 
-//     void init_synth(int sample_rate) 
-//     {
-//         wave_table.init(sample_rate);
-//         wave_table.generate_saw();
-//         poly.init();
-//     }
+        if (period_part < 0.5f)
+            this->table[static_cast<int>(Waveform::TRIANGLE)][i] = -1.0f + (period_part * 4.0f);
 
-//     float lerp(float a, float b, float t)
-//     {
-//         return (1 - t) * a + t * b;
-//     }
+        else
+            this->table[static_cast<int>(Waveform::TRIANGLE)][i] = 3.0f - (period_part * 4.0f);
+    }
+}
 
-//     void add_note(int note_id)
-//     {
-//         poly.add_voice(note_id);
-//     }
+void WaveTable::generate_square()
+{
+    int half = WAVETABLE_SIZE / 2;
 
-//     void remove_note(int note_id)
-//     {
-//         poly.remove_voice(note_id);
-//     }
+    for(int i = 0; i < half; i++)
+    {
+        this->table[static_cast<int>(Waveform::SQUARE)][i] = 1.f;
+    }
 
-//     void set_unison_count(int instances)
-//     {
-//         poly.set_unison_count(instances);
-//     }
-
-
-// }
-
-
+    for(int i = half; i < WAVETABLE_SIZE; i++)
+    {
+        this->table[static_cast<int>(Waveform::SQUARE)][i] = -1.f;
+    }
+}

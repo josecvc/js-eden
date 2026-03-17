@@ -55,7 +55,9 @@ target_link_options(dsp PRIVATE
     '_increase_row_count',
     '_decrease_row_count',
     '_expand_pattern',
-    '_shrink_pattern'
+    '_shrink_pattern',
+    '_set_instrument_sample',
+    '_set_instrument_synth'
     ]"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"
