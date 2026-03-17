@@ -24,6 +24,7 @@ struct Voice
     bool active{false};
     bool releasing{false};
     bool finished{false};
+    bool backwards{false};
 
     InstrumentType type;
     Instrument* instrument;
