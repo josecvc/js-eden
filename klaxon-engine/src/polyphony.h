@@ -9,6 +9,7 @@ struct Voice
     int note_id;
     int channel_id;
     int instrument_id;
+    int sample_id;
 
     int env_tick;
     int env_pos;
@@ -44,14 +45,18 @@ public:
 
     Polyphony() {}
     void init();
-    int get_current_voices() const;
-    void add_voice(Instrument* samp_inst, Sample* sample, int channel_id, int note_id, int instrument_id, float volume, int root_note);
+    
+    void add_voice(Instrument* samp_inst, Sample* sample, int channel_id, int note_id, int instrument_id, int sample_id, float volume, int root_note);
     void remove_voice(int channel_id, int note_id, int instrument_id);
+
     void render_voices(float** output, int frames);
     void render_synth(Voice& voice, float** output, int frames);
     void render_sample(Voice& voice, float** output, int frames);
-
     void advance_env_tick();
+
+    void dump_playheads(int* sample_playhead_arr, int* envelope_playhead_arr, int sample_id, int instrument_id);
+
+    int get_current_voices() const;
 
     Voice voices[MAX_VOICES];
     int curr{0};

@@ -2,6 +2,8 @@
 #define SAMPLE_H
 
 #include <vector>
+#include <string>
+#include <ctype.h>
 
 enum class LoopType : int
 {
@@ -17,20 +19,24 @@ public:
 
     void load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
 
+    std::string filename;
+
     // raw PCM
     float* left; 
     float* right;
 
-    const char* filename;
+    uint32_t length;
     int channels;
     int sample_rate;
+
+    float volume{1.f};
     int root_note{72}; // Assume C-5 at first
-    unsigned long length;
+    int rel_note{0};       
+    float finetune{0.f};    
 
     LoopType loop_type{LoopType::NONE};
-
-    unsigned long loop_from;
-    unsigned long loop_to;
+    uint32_t loop_from;
+    uint32_t  loop_to;
 };
 
 #endif

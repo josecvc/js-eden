@@ -38,7 +38,7 @@ int Engine::process(float** output, int frames)
     }
 
     mix_instruments(output, frames);
-    
+    poly.dump_playheads(sample_playheads, envelope_playheads, current_instrument, current_sample);
     return is_hit;
 }
 
@@ -123,7 +123,15 @@ void Engine::process_row()
 
         Sample* smp = get_sample(inst, cell.noteId);
 
-        poly.add_voice(&inst, smp, ch + 1, cell.noteId, cell.instrumentId - 1, cell.volume, 72); // "72" needs to be changed afterwards
+        int sample_id;
+
+        if (!smp)
+            sample_id = -1;
+        else {
+            sample_id = inst.sample.note_sample[cell.noteId];
+        }
+
+        poly.add_voice(&inst, smp, ch + 1, cell.noteId, cell.instrumentId - 1, sample_id, cell.volume, 72); // "72" needs to be changed afterwards
     }
 }
 
@@ -199,10 +207,10 @@ void Engine::set_ticks_per_row(int ticks_per_row)
 
 int Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
 {
-    auto sample = std::make_shared<Sample>();
+    auto sample = std::make_unique<Sample>();
     sample->load_sample(filename, left, right, sample_rate, length);
 
-    sample_pool.push_back(sample);
+    sample_pool.push_back(std::move(sample));
 
     int sample_id = sample_pool.size() - 1;
 
@@ -366,7 +374,15 @@ extern "C"
 
         Sample* smp = engine->get_sample(inst, note_id);
 
-        engine->poly.add_voice(&inst, smp, 0, note_id, instrument_id - 1, 100.f, 72);
+        int sample_id;
+
+        if (!smp)
+            sample_id = -1;
+        else {
+            sample_id = inst.sample.note_sample[note_id];
+        }
+
+        engine->poly.add_voice(&inst, smp, 0, note_id, instrument_id - 1, sample_id, 100.f, 72);
 
         return 0;
     }
@@ -603,10 +619,32 @@ extern "C"
         return engine->pattern_info.shrink_pattern(pattern_id);
     }
 
+    int* get_sample_playhead_ptr(Engine* engine)
+    {
+        if (!engine) return nullptr;
+
+        return engine->sample_playheads;
+    }
+
+    int* get_envelope_playhead_ptr(Engine* engine)
+    {
+        if (!engine) return nullptr;
+
+        return engine->envelope_playheads;
+    }
+
     int get_bpm(Engine* engine) {
         if (!engine) return -2;
 
         return engine->bpm;
+    }
+
+    int set_current_view(Engine* engine, int sample_id, int instrument_id)
+    {
+        if (!engine) return -2;
+
+        engine->current_sample = sample_id;
+        engine->current_instrument = instrument_id;
     }
 
     //TODO: Finish WebAssembly functions

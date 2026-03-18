@@ -3,8 +3,6 @@
 
 #include <vector>
 #include <memory>
-#include <variant>
-
 
 #include "instrument.h"
 #include "pattern.h"
@@ -18,7 +16,7 @@ public:
     static constexpr int PATTERN = 1;
     static constexpr int ORDER = 2;
 
-    Engine() {}
+    Engine() : sample_rate(44100), bpm(140), ticks_per_row(6) {}
     Engine(int sample_rate, int bpm, int ticks_per_row) : sample_rate(sample_rate), bpm(bpm), ticks_per_row(ticks_per_row) {}
 
     void init(
@@ -65,24 +63,27 @@ public:
     // playback state
     bool is_playing{false};
 
-    double current_samples;
-    int current_ticks;
-    short current_row;
-    short current_order;
-    short current_pattern;
+    double current_samples{0};
+    int current_ticks{0};
+    short current_row{0};
+    short current_order{0};
+    short current_pattern{0};
 
-    int sample_playheads[Polyphony::MAX_VOICES];
-    int instrument_playheads[MAX_INSTRUMENTS];
+    int current_instrument{0};
+    int current_sample{0};
+
+    int sample_playheads[Polyphony::MAX_VOICES]{-1};
+    int envelope_playheads[Polyphony::MAX_VOICES]{-1};
 
     int instrument_count{0};
     
     PatternInfo pattern_info;
 
     // Channel data (last command used, channel audio information)
-    ChannelData channels[128];
+    ChannelData channels[MAX_CHANNELS];
 
     Instrument instruments[MAX_INSTRUMENTS];
-    std::vector<std::shared_ptr<Sample>> sample_pool;
+    std::vector<std::unique_ptr<Sample>> sample_pool;
 
     Polyphony poly;
 };

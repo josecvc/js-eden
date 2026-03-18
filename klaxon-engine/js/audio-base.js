@@ -15,6 +15,8 @@ const PATTERN = 1;
 const ORDER = 2;
 const IS_PLAYING = 3;
 
+const MAX_VOICES = 64;
+
 class MixerProcessor extends AudioWorkletProcessor {
     constructor() {
         super();
@@ -133,13 +135,17 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.b = 0;
                 
                 this.playbackBuffer = new SharedArrayBuffer(4 * Int32Array.BYTES_PER_ELEMENT);
-                this.playbackArray = new Int32Array(
-                    this.playbackBuffer   
-                );
+                this.playbackArray = new Int32Array(this.playbackBuffer);
+
+                this.playheadBuffer = new SharedArrayBuffer(2 * MAX_VOICES * Int32Array.BYTES_PER_ELEMENT);
+                this.playheadArray = new Int32Array(this.playheadBuffer);
+                
+                this.playheadRead = new Int32Array(this.wasm.exports.memory.buffer); 
 
                 this.port.postMessage({
                     type: "sab",
-                    sharedBuffer: this.playbackBuffer
+                    sharedBuffer: this.playbackBuffer,
+                    playheadBuffer: this.playheadBuffer
                 });
 
                 this.samplePool = [];
@@ -314,6 +320,14 @@ class MixerProcessor extends AudioWorkletProcessor {
 
         outs[0][0].set(this.leftHeap);
         outs[0][1].set(this.rightHeap);
+
+        const sPlayheadPtr = this.wasm.exports.get_sample_playhead_ptr(this.enginePtr) >> 2;
+        const ePlayheadPtr = this.wasm.exports.get_envelope_playhead_ptr(this.enginePtr) >> 2;
+
+        for(let i = 0; i < MAX_VOICES; i++) {
+            Atomics.store(this.playheadArray, i, this.playheadRead[sPlayheadPtr + i]);
+            Atomics.store(this.playheadArray, MAX_VOICES + i, this.playheadRead[ePlayheadPtr + i]);
+        }
 
         // give playback statistics to JS-EDEN
         Atomics.store(this.playbackArray, ROW, currRow);

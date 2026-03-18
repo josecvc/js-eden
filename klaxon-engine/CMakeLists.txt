@@ -57,7 +57,9 @@ target_link_options(dsp PRIVATE
     '_expand_pattern',
     '_shrink_pattern',
     '_set_instrument_sample',
-    '_set_instrument_synth'
+    '_set_instrument_synth',
+    '_get_sample_playhead_ptr',
+    '_get_envelope_playhead_ptr'
     ]"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"

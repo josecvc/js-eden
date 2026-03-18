@@ -27,6 +27,7 @@ engine_node is null; # this specifically is for holding the engine
 
 samplePool = [];
 playbackArray = null;
+playheadArray = null;
 
 ${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
@@ -66,6 +67,10 @@ ${{
             if(data.type == "sab") {
                 root.lookup("playbackArray").assign(
                     new Int32Array(data.sharedBuffer), root.scope
+                );
+
+                root.lookup("playheadArray").assign(
+                    new Int32Array(data.playheadBuffer), root.scope
                 );
             }
         };
@@ -323,11 +328,13 @@ ${{
     function updatePlayback() {
         const playing = root.lookup("is_playing");
         const playbackArray = root.lookup("playbackArray");
+        const playheadArray = root.lookup("playheadArray");
 
         const ROW = 0;
         const PATTERN = 1;
         const ORDER = 2;
         const IS_PLAYING = 3;
+        const MAX_VOICES = 64;
 
         if (playing.value()) {
             const row = Atomics.load(playbackArray.value(), ROW);
@@ -342,7 +349,64 @@ ${{
             // TODO: Make another SharedArrayBuffer to directly modify playback state from JS-EDEN (without the need for postMessage)
             // root.lookup("is_playing").assign(Boolean(playbackState), root.scope); 
         }
+        
+        
 
+        if(root.lookup("wasmReady").value()) {
+            const samplePlayheads = root.lookup("samplePlayheads");
+            const envelopePlayheads = root.lookup("envelopePlayheads");
+
+            const tempSamples = [];
+            const tempEnvelopes = [];
+
+            for(let i = 0; i < MAX_VOICES; i++) {
+                const sampleHead = Atomics.load(playheadArray.value(), i);
+                const envelopeHead = Atomics.load(playheadArray.value(), i + MAX_VOICES);
+                
+                if(sampleHead != -1)
+                    tempSamples.push(sampleHead);
+                if(envelopeHead != -1)
+                    tempEnvelopes.push(envelopeHead);
+            }
+            
+            // I need this otherwise I'm triggering all observables that depend on these, which uses too much GPU processing
+            const samplePrev = samplePlayheads.value();
+            let sampleChange = false;
+            if (samplePrev.length != tempSamples.length || tempSamples.some((v, i) => v !== samplePrev[i])) sampleChange = true;
+
+            const envPrev = envelopePlayheads.value();
+            let envChange = false;
+            if (envPrev.length != tempEnvelopes.length || tempEnvelopes.some((v, i) => v !== envPrev[i])) envChange = true;
+            
+            if (sampleChange) {
+                samplePlayheads.assign(
+                    tempSamples,
+                    root.scope
+                );
+
+                root.lookup("numSamplePlayheads").assign(
+                    tempSamples.length,
+                    root.scope
+                );
+            }
+                
+            if(envChange) {
+                envelopePlayheads.assign(
+                    tempEnvelopes,
+                    root.scope
+                );
+
+                root.lookup("numEnvelopePlayheads").assign(
+                    tempEnvelopes.length,
+                    root.scope
+                );
+            }
+                
+            
+
+            
+        }
+        
         requestAnimationFrame(updatePlayback);
     }
 
@@ -430,8 +494,10 @@ func addSample {
                data: [left, right],
             })
 
-            const blockSize = Math.floor(data.length / 1024);
-            const wf = new Float32Array(1024);
+            const DOWNSAMPLE = 4096;
+
+            const blockSize = Math.floor(data.length / DOWNSAMPLE);
+            const wf = new Float32Array(DOWNSAMPLE);
 
             const monoform = new Float32Array(data.length);
 
@@ -439,7 +505,7 @@ func addSample {
                 monoform[i] = (left[i] + right[i]) * 0.5;
             }
 
-            for (let i = 0; i < 4096; i++) {
+            for (let i = 0; i < DOWNSAMPLE; i++) {
                 let sum = 0;
                 const start = i * blockSize;
                 const end = Math.min(start + blockSize, data.length);
@@ -456,8 +522,11 @@ func addSample {
                     channels: data.numberOfChannels,
                     length: data.length,
                     waveform: wf,
-                    leftPtr: 0,
-                    rightPtr: 0
+                    leftPtr: data.leftPtr,
+                    rightPtr: data.rightPtr,
+                    loopType: 0,
+                    loopFrom: 0,
+                    loopTo: 0
                 }
             )
 
@@ -996,20 +1065,84 @@ waveformBackground is Rectangle(0, viewportHeight/4 + 40, viewportWidth, 3*viewp
 
 # WAVEFORM
 waveformMid is Line(0, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, viewportWidth, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, "#ffffff9f")
-samplePoints is Point((s * viewportWidth) / 1024, samplePool[currentSample + 1].waveform[s + 1] * 3*viewportHeight/4/1.5 + viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2) with s is 0..1023;
+samplePoints is Point((s * viewportWidth) / 1024, samplePool[currentSample + 1].waveform[s + 1] * 3*viewportHeight/4/1.5/2 + viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2) with s is 0..1023;
 waveform is LineSequence(samplePoints, "#ff7a7a");
+
+# Line(x1, y1, x2, y2)
+playheadPosition is samplePlayheads[s + 1]/samplePool[currentSample + 1].length * viewportWidth;
+playheads is Line(playheadPosition, viewportHeight/4 + 40, playheadPosition, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#cfcfcf") with s is 0..(numSamplePlayheads - 1);
 
 # SAMPLE INFORMATION
 
-sampleLength is Text("Length " + round(samplePool[currentSample + 1].length / sampleRate, 3) + "s", 7/8 * viewportWidth, 8/10 * viewportHeight, fontSize, "#ffffff");
+lengthTxt is round(samplePool[currentSample + 1].length / sampleRate, 3) if (samplePool.length < currentSample) else 0;
+loopStartTxt is round(samplePool[currentSample + 1].loopStart/sampleRate, 3) if (samplePool.length < currentSample) else 0;
+loopLenTxt is round((samplePool[currentSample + 1].loopEnd - samplePool[currentSample + 1].loopStart)/sampleRate, 3) if (samplePool.length < currentSample) else 0;
 
-sampleInformation is [sampleLength];
+sampleLength is Text("Length: " + lengthTxt + "s", 7/8 * viewportWidth, 8/10 * viewportHeight, fontSize, "#ffffff");
+# sampleLoopType is Text("Loop: " + samplePool[currentSample + 1].loopType, 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
+sampleLoopStart is Text("Loop Start: " + loopStartTxt + "s" , 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
+sampleLoopLen is Text("Length: " + loopLenTxt + "s", 7/8 * viewportWidth, 8/10*viewportHeight + fontSize * 2, fontSize, "#ffffff");
+
+sampleInformation is [sampleLength, sampleLoopType, sampleLoopStart, sampleLoopLen];
 
 # SAMPLE BUTTONS
 
+samplePlayButton is Button("sampleplay", "Play", 0,  8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleStopButton is Button("samplestop", "Stop", 0, 8/10 * viewportHeight + buttonSize*2.8, buttonSize * 4, buttonSize*2.8);
 
+sampleLoadDedicatedButton is Button("loadinsampleview", "Load", buttonSize * 4, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleClearDedicatedButton is Button("clearinsampleview", "Clear", buttonSize * 4, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
 
-sampleEditor is [sampleBackground, waveformBackground, waveformMid, waveform, sampleInformation];
+sampleCopyButton is Button("samplecopy", "Copy", 2*viewportWidth/12, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleCutButton is Button("samplecut", "Cut", 2*viewportWidth/12, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+samplePasteButton is Button("samplepaste", "Paste", 2*viewportWidth/12 + buttonSize*4, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleCropButton is Button("samplecrop", "Crop", 2*viewportWidth/12 + buttonSize*4, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+
+sampleZoomIn is Button("samplezoomin", "Zoom In", 4*viewportWidth/12, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleZoomOut is Button("samplezoomout", "Zoom Out", 4*viewportWidth/12, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+
+sampleUndoButton is Button("sampleundo", "Undo", 5*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleRedoButton is Button("sampleredo", "Redo", 5*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+
+sampleReverseButton is Button("samplereverse", "Reverse", 6*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleNormaliseButton is Button("samplenormalise", "Normalise", 6*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+
+sampleViewButtons is [
+    samplePlayButton, sampleStopButton, sampleLoadDedicatedButton, sampleClearDedicatedButton,
+    sampleCopyButton, sampleCutButton, samplePasteButton, sampleCropButton,
+    sampleZoomIn, sampleZoomOut, sampleUndoButton, sampleRedoButton,
+    sampleReverseButton, sampleNormaliseButton
+];
+
+# SAMPLE LOOP DETAILS
+
+loopStartX is samplePool[currentSample + 1].loopStart/samplePool[currentSample + 1].length * viewportWidth;
+loopEndX is samplePool[currentSample + 1].loopEnd/samplePool[currentSample + 1].length * viewportWidth;
+
+loopStartLine is Line(loopStartX, viewportHeight/4 + 40, loopStartX, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#6b6b6b");
+loopEndLine is Line(loopEndX, viewportHeight/4 + 40, loopEndX, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#6b6b6b");
+
+# use these triangles to query mouse click 
+loopStartHead is Polygon([Point(loopStartX, viewportHeight/4 + 40),
+    Point(loopStartX + 30, viewportHeight/4 + 40),
+    Point(loopStartX, viewportHeight/4 + 40 + 30)], "#b01f1f");
+loopEndHead is Polygon([Point(loopEndX, 3*viewportHeight/4 / 1.5),
+    Point(loopEndX - 30, 3*viewportHeight/4 / 1.5),
+    Point(loopStartX, 3*viewportHeight/4 / 1.5 - 30)], "#b01f1f");
+
+loopLines is [loopStartLine, loopEndLine, loopStartHead, loopEndHead];
+
+loopNoneText is Text("No Loop", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, fontSize, "#ffffff");
+loopForwardText is Text("Forward", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + fontSize, fontSize, "#ffffff");
+loopBidiText is Text("Bidi", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + fontSize*2, fontSize, "#ffffff");
+
+loopTexts is [loopNoneText, loopForwardText, loopBidiText];
+
+# SAMPLE SELECTION
+
+sampleSelection is Rectangle(selectFrom, viewportHeight/4 + 40, selectTo - selectFrom, 3*viewportHeight/4 / 1.5, "#d0d0d094");
+
+sampleEditor is [sampleBackground, waveformBackground, waveformMid, waveform, playheads, sampleSelection, loopLines, sampleViewButtons, loopTexts, sampleInformation];
 }
 
 action MakeInstrumentEditor {
@@ -1542,6 +1675,7 @@ action ACTIVE {
     jseden_project_title = "Klaxon";
 
     # constants
+    MAX_VOICES = 64;
     MAX_PATTERNS = 255;
     MAX_CHANNELS = 127;
     MAX_ROWS = 256;
@@ -1606,11 +1740,20 @@ action ACTIVE {
 
     step = 0;
 
+    selectFrom = 255;
+    selectTo = 1024;
+
     is_playing is false;
     order = 0 with i is 1..255;
     keys = 0 with i is 0..119;
-    semitones = ["C‒", "C#", "D-", "D#", "E‒", "F‒", "F#", "G‒", "G#", "A-", "A#", "B-"]
+    semitones = ["C‒", "C#", "D-", "D#", "E‒", "F‒", "F#", "G‒", "G#", "A-", "A#", "B-"];
     octave = 4;
+
+    samplePlayheads = [];
+    envelopePlayheads = [];
+
+    numSamplePlayheads = 0;
+    numEnvelopePlayheads = 0;
 
     instrument_list = InstrumentList("instrument_list");
 }

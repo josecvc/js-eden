@@ -7,7 +7,7 @@ void Polyphony::init()
 
 }
 
-void Polyphony::add_voice(Instrument* instrument, Sample* sample, int channel_id, int note_id, int instrument_id, float volume, int root_note)
+void Polyphony::add_voice(Instrument* instrument, Sample* sample, int channel_id, int note_id, int instrument_id, int sample_id, float volume, int root_note)
 {
     int old = -1;
 
@@ -45,6 +45,7 @@ void Polyphony::add_voice(Instrument* instrument, Sample* sample, int channel_id
     v.note_id = note_id;
     v.channel_id = channel_id;
     v.instrument_id = instrument_id;
+    v.sample_id = sample_id;
     v.rate = equal_temperament(root_note, note_id);
     v.frequency = calculate_frequency(note_id);
     v.active = true;
@@ -264,6 +265,18 @@ void Polyphony::advance_env_tick()
         float frac = static_cast<float>(voice.env_tick - P0.tick) / tick_diff;
 
         voice.env_val = lerp(P0.vol / 100.0f, P1.vol / 100.0f, frac);
+    }
+}
+
+void Polyphony::dump_playheads(int* sample_playhead_arr, int* envelope_playhead_arr, int sample_id, int instrument_id)
+{
+    if (!sample_playhead_arr || !envelope_playhead_arr) return;
+
+    for(int v = 0; v < MAX_VOICES; v++)
+    {       
+        sample_playhead_arr[v] = (voices[v].active && voices[v].sample && voices[v].sample_id == sample_id) ? static_cast<int>(voices[v].position) : -1;
+        
+        envelope_playhead_arr[v] = (voices[v].active && voices[v].instrument_id == instrument_id) ? voices[v].env_tick : -1;
     }
 }
 
