@@ -13,6 +13,7 @@ struct Voice
     int env_tick;
     int env_pos;
     float env_val;
+    float env_fade;
 
     float frequency{440.f};
     float phase{.0f};

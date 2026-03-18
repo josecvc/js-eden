@@ -30,9 +30,9 @@ playbackArray = null;
 
 ${{   
     root.lookup("ctx").value().audioWorklet.addModule("../../klaxon-engine/js/audio-base.js").then(() => {
-        console.log(
-            root.lookup("ctx").value().sampleRate
-        )
+            root.lookup("sampleRate").assign(
+                root.lookup("ctx").value().sampleRate, root.scope
+            );
         const node = new AudioWorkletNode(root.lookup("ctx").value(), "mixer-processor", {numberOfOutputs: 1, outputChannelCount: [2]});
 
         node.connect(root.lookup("gain_node").value());
@@ -439,7 +439,7 @@ func addSample {
                 monoform[i] = (left[i] + right[i]) * 0.5;
             }
 
-            for (let i = 0; i < 1024; i++) {
+            for (let i = 0; i < 4096; i++) {
                 let sum = 0;
                 const start = i * blockSize;
                 const end = Math.min(start + blockSize, data.length);
@@ -848,8 +848,8 @@ stepPlusButton is Button("stepplus", "+");
 stepMinusButton is Button("stepminus", "-");
 
 # PATTERN MUTATION BUTTONS
-expandButton is Button("expandpat", "Expand");
-shrinkButton is Button("shrinkpat", "Shrink");
+expandButton is Button("expandpat", "Expand", buttonSize*4*2, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
+shrinkButton is Button("shrinkpat", "Shrink", buttonSize*4*2, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
 addChanButton is Button("addchan", "Add");
 subChanButton is Button("subchan", "Sub");
@@ -864,7 +864,8 @@ instrumentEditButton is Button("instrumentedit", "Instr Edit", buttonSize*4, vie
 buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton, 
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
     orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton,
-    sampleEditButton, instrumentEditButton, octavePlusButton, octaveMinusButton
+    sampleEditButton, instrumentEditButton, octavePlusButton, octaveMinusButton,
+    expandButton, shrinkButton
 ];
 
 # Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
@@ -920,7 +921,7 @@ sampleNum is Text(s if (s*fontSize + sampleOffset[2] + fontSize < viewportHeight
 
 sampleName is samplePool[s+1].filename if (s+1 <= samplePool.length) else "";
 
-sampleText is Text(sampleName if (s*fontSize + sampleOffset[2] < viewportHeight/4) else "", 3 * viewportWidth/4 + fontSize + sampleOffset[1], s*fontSize + instrOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
+sampleText is Text(sampleName if (s*fontSize + sampleOffset[2] < viewportHeight/4) else "", 3 * viewportWidth/4 + fontSize + sampleOffset[1], s*fontSize + sampleOffset[2], fontSize, "black" if s == currentSample else "white") with s is 0..15;
 
 
 # Sample List Scrolling
@@ -992,9 +993,23 @@ action MakeSampleEditor {
 
 sampleBackground is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4, "#424242");
 waveformBackground is Rectangle(0, viewportHeight/4 + 40, viewportWidth, 3*viewportHeight/4 / 1.5, "#000000");
-waveformMid is Line(0, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, viewportWidth, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, "#FFFFFF")
 
-sampleEditor is [sampleBackground, waveformBackground, waveformMid];
+# WAVEFORM
+waveformMid is Line(0, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, viewportWidth, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2, "#ffffff9f")
+samplePoints is Point((s * viewportWidth) / 1024, samplePool[currentSample + 1].waveform[s + 1] * 3*viewportHeight/4/1.5 + viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5 / 2) with s is 0..1023;
+waveform is LineSequence(samplePoints, "#ff7a7a");
+
+# SAMPLE INFORMATION
+
+sampleLength is Text("Length " + round(samplePool[currentSample + 1].length / sampleRate, 3) + "s", 7/8 * viewportWidth, 8/10 * viewportHeight, fontSize, "#ffffff");
+
+sampleInformation is [sampleLength];
+
+# SAMPLE BUTTONS
+
+
+
+sampleEditor is [sampleBackground, waveformBackground, waveformMid, waveform, sampleInformation];
 }
 
 action MakeInstrumentEditor {
@@ -1543,6 +1558,7 @@ action ACTIVE {
     PARAM = 5;
 
     # observables
+    sampleRate = 44100;
     masterVolume = 100;
 
     bpm = 140;

@@ -33,6 +33,7 @@ public:
     int sustain_at;
     int loop_from;
     int loop_to;
+    int fadeout;
     bool enabled{false};
     Point points[MAX_POINTS];
 };
@@ -59,4 +60,4 @@ struct Instrument
     Envelope envelope;
 };
 
-#endif
+#endif 

@@ -240,9 +240,14 @@ void Polyphony::advance_env_tick()
             voice.env_tick = env.points[voice.env_pos].tick;
         }
 
-        if (voice.env_pos + 1 >= MAX_POINTS || !env.points[voice.env_pos + 1].active)
+        if (voice.env_pos + 1 >= MAX_POINTS || !env.points[voice.env_pos + 1].active && voice.env_fade == 0.0f)
         {
             voice.env_val = env.points[voice.env_pos].vol / 100.f;
+
+            if (voice.env_val == 0.f) {
+                voice.finished = true;
+            }
+
             continue;
         }
 
