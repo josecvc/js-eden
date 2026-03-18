@@ -1,7 +1,6 @@
 #ifndef INSTRUMENT_H
 #define INSTRUMENT_H
 
-#include <variant>
 #include "sample.h"
 #include "wavetable.h"
 

@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include <ctype.h>
+#include <cstdint>
 
 enum class LoopType : int
 {
@@ -24,6 +24,9 @@ public:
     // raw PCM
     float* left; 
     float* right;
+
+    // std::vector<float[]> left;
+    // std::vector<float[]> right;
 
     uint32_t length;
     int channels;
