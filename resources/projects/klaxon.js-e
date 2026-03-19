@@ -1528,9 +1528,15 @@ action InitUIEvents {
     }
 
     when(deleteDirty) {
-        # check the current element, remove from JS-EDEN array (set to -1)
+        # check the current element, remove from JS-EDEN array (set to 0)
         # dispatch message to AWP and remove from WASM array
         ${{console.log("Deleted!")}}$;
+
+        setNote(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+        setInstrument(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+        setVolume(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+        setEffect(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+        setParam(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         deleteDirty = false;
     }
 
