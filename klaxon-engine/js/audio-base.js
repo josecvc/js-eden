@@ -282,7 +282,7 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     expandPattern(msg) {
-        this.wasm.exports.expand_pattern(this.enginePtr, msg.patternId, msg.upDown);
+        const res = this.wasm.exports.expand_pattern(this.enginePtr, msg.patternId);
     }
 
     shrinkPattern(msg) {
@@ -311,7 +311,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         const currPattern = this.wasm.exports.get_current_pattern(this.enginePtr);
         const currOrder = this.wasm.exports.get_current_order(this.enginePtr);
         const playbackState = this.wasm.exports.get_playback_state(this.enginePtr);
-        
+
         if(voices >= 1) {
             console.log(voices + " voice(s)");
         }

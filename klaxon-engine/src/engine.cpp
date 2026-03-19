@@ -649,5 +649,13 @@ extern "C"
         return 0;
     }
 
+    int get_num_rows(Engine* engine, int pattern_id)
+    {
+        if (!engine) return -2;
+        if (pattern_id < 0 || pattern_id >= MAX_PATTERNS) return -1;
+
+        return engine->pattern_info.patterns[pattern_id].num_rows;
+    }
+
     //TODO: Finish WebAssembly functions
 }

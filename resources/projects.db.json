@@ -92,10 +92,10 @@
 		"listed": true
 	},
 	"klaxon": {
-		"title": "Klaxon Synthesizer",
+		"title": "Klaxon Tracker",
 		"file": "resources/projects/klaxon.js-e",
 		"author": "J",
-		"tags": ["synth"],
+		"tags": ["tracker", "music"],
 		"listed": true
 	}
 }

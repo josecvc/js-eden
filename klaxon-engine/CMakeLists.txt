@@ -24,49 +24,7 @@ target_compile_options(dsp PRIVATE
 target_link_options(dsp PRIVATE
     "--no-entry"
     "-sSTANDALONE_WASM=1"
-    "-sEXPORTED_FUNCTIONS=[
-    '_malloc', 
-    '_free', 
-    '_create_engine', 
-    '_destroy_engine', 
-    '_init_engine', 
-    '_process',
-    '_register_sample',
-    '_play_from_midi',
-    '_play_track',
-    '_pause_track',
-    '_stop_track',
-    '_set_tempo',
-    '_set_sample_rate',
-    '_set_ticks_per_row',
-    '_get_num_voices',
-    '_get_instrument_id_from_channel',
-    '_get_note_id_from_channel',
-    '_get_current_row', 
-    '_get_current_pattern',
-    '_get_current_order',
-    '_get_playback_state' ,
-    '_stop_from_midi', 
-    '_get_first_cell', 
-    '_set_note', 
-    '_set_instrument', 
-    '_set_volume', 
-    '_set_effect', 
-    '_set_param', 
-    '_get_bpm',
-    '_insert_order',
-    '_remove_order',
-    '_increase_channel_count',
-    '_decrease_channel_count',
-    '_increase_row_count',
-    '_decrease_row_count',
-    '_expand_pattern',
-    '_shrink_pattern',
-    '_set_instrument_sample',
-    '_set_instrument_synth',
-    '_get_sample_playhead_ptr',
-    '_get_envelope_playhead_ptr'
-    ]"
+    "-sEXPORTED_FUNCTIONS=['_malloc', '_free', '_create_engine', '_destroy_engine', '_init_engine', '_process','_register_sample','_play_from_midi','_play_track','_pause_track','_stop_track','_set_tempo','_set_sample_rate','_set_ticks_per_row','_get_num_voices','_get_instrument_id_from_channel','_get_note_id_from_channel','_get_current_row', '_get_current_pattern','_get_current_order','_get_playback_state' ,'_stop_from_midi', '_get_first_cell', '_set_note', '_set_instrument', '_set_volume', '_set_effect', '_set_param', '_get_bpm','_insert_order','_remove_order','_increase_channel_count','_decrease_channel_count','_increase_row_count','_decrease_row_count','_expand_pattern','_shrink_pattern','_set_instrument_sample','_set_instrument_synth','_get_sample_playhead_ptr','_get_envelope_playhead_ptr', '_get_num_rows']"
     "-sERROR_ON_UNDEFINED_SYMBOLS=0"
     "-O3"
     "-msimd128"

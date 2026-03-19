@@ -82,6 +82,7 @@ public:
     
     PatternInfo pattern_info;
 
+    // History and cut/copy
     SampleEditor editor;
     Clipboard clipboard;
 
@@ -89,6 +90,7 @@ public:
     ChannelData channels[MAX_CHANNELS];
 
     Instrument instruments[MAX_INSTRUMENTS];
+
     std::array<std::unique_ptr<Sample>, MAX_SAMPLES> sample_pool;
 
     Polyphony poly;

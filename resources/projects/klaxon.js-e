@@ -412,10 +412,6 @@ ${{
                     root.scope
                 );
             }
-                
-            
-
-            
         }
         
         requestAnimationFrame(updatePlayback);
@@ -568,66 +564,6 @@ func Sample {
 ${{
     
 }}$
-
-# SAMPLE JS FUNCTIONS
-${{
-    Sample.prototype.getWaveform = function() {
-
-    }
-}}$
-
-# INSTRUMENT_LIST JS FUNCTIONS
-${{
-    // TODO: Make this reflect in the engine
-    InstrumentList.prototype.addInstrument = function(inst) {
-        this.instruments.push(inst);
-    }
-
-    InstrumentList.prototype.removeInstrument = function(instId) {
-        if(instId < 0 || instId >= this.instruments.length) return;
-
-        this.instruments.splice(instId, 1);
-    }
-
-    InstrumentList.prototype.popInstrument = function() {
-        if(this.instruments.length == 0) return;
-
-        this.instruments.pop();
-    }
-
-    InstrumentList.prototype.getNumInstruments = function() {
-        return this.instruments.length;
-    }
-}}$
-
-## INSTRUMENT JS-EDEN FUNCTIONS
-proc addInstrument {
-    para inst
-    ${{
-        let i = inst;
-
-        root.lookup("instrument_list").value().addInstrument(i);
-    }}$
-}
-
-proc removeInstrument {
-    para instId
-    ${{
-        root.lookup("instrument_list").value().removeInstrument(instId);
-    }}$
-}
-
-proc popInstrument {
-    ${{
-        root.lookup("instrument_list").value().popInstrument();
-    }}$
-}
-
-function getNumInstruments {
-    ${{
-       return root.lookup("instrument_list").value().getNumInstruments();
-    }}$
-}
 
 proc createSample {
     para obsName
@@ -933,8 +869,8 @@ stepMinusButton is Button("stepminus", "-");
 expandButton is Button("expandpat", "Expand", buttonSize*4*2, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
 shrinkButton is Button("shrinkpat", "Shrink", buttonSize*4*2, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
-addChanButton is Button("addchan", "Add");
-subChanButton is Button("subchan", "Sub");
+addChanButton is Button("addchan", "Add Chan.", buttonSize*4*3, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
+subChanButton is Button("subchan", "Sub Chan.", buttonSize*4*3, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
 lenPlusButton is Button("lenplus", "+");
 lenMinusButton is Button("lenminus", "-");
@@ -947,7 +883,7 @@ buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton,
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
     orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton,
     sampleEditButton, instrumentEditButton, octavePlusButton, octaveMinusButton,
-    expandButton, shrinkButton
+    expandButton, shrinkButton, addChanButton, subChanButton
 ];
 
 # Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
@@ -962,7 +898,10 @@ speedText is Text("SPD  " + ticksPerRow, viewportWidth/8, viewportHeight/14 + fo
 patternIDTxt is Text("Pattern: " + (currentPattern - 1), viewportWidth/4 + buttonSize, viewportHeight/14, fontSize, "white", "#CBE5D4");
 
 octaveText is Text("Octave: " + octave, viewportWidth/4 + buttonSize, viewportHeight/14 + fontSize, fontSize, "white", "#CBE5D4");
+
 stepText is Text("Step: " + step);
+
+rowCountText is Text("Rows: " + patternRows[currentPattern]);
 
 information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator];
 
@@ -1093,7 +1032,7 @@ loopLenTxt is round((samplePool[currentSample + 1].loopTo - samplePool[currentSa
 
 sampleLength is Text("Length: " + lengthTxt + "s", 7/8 * viewportWidth, 8/10 * viewportHeight, fontSize, "#ffffff");
 # sampleLoopType is Text("Loop: " + samplePool[currentSample + 1].loopType, 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
-sampleLoopStart is Text("Loop Start: " + loopStartTxt + "s" , 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
+sampleLoopStart is Text("Start: " + loopStartTxt + "s" , 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
 sampleLoopLen is Text("Length: " + loopLenTxt + "s", 7/8 * viewportWidth, 8/10*viewportHeight + fontSize * 2, fontSize, "#ffffff");
 
 sampleInformation is [sampleLength, sampleLoopType, sampleLoopStart, sampleLoopLen];
@@ -1594,6 +1533,86 @@ action InitUIEvents {
         ${{console.log("Deleted!")}}$;
         deleteDirty = false;
     }
+
+    when(expandpat_click) {
+        do :project > ExpandPattern;
+
+        ${{
+           root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "expand_pattern",
+                    patternId: root.lookup("currentPattern").value() - 1
+                }
+           ); 
+        }}$
+    }
+
+    when(shrinkpat_click) {
+        do :project > ShrinkPattern;
+
+        ${{
+           root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "shrink_pattern",
+                    patternId: root.lookup("currentPattern").value() - 1
+                }
+           );
+        }}$
+    }
+
+    when(addchan_click) {
+        upDown = true;
+        do :project > ResizeChannels;
+
+        ${{
+            root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "increase_channel_count"
+                }
+            );
+        }}$
+    }
+
+    when(subchan_click) {
+        upDown = false;
+        do :project > ResizeChannels;
+
+        ${{
+            root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "decrease_channel_count"
+                }
+            );
+        }}$
+    }
+
+    when(lenplus_click) {
+        upDown = true;
+        do :project > ResizeRow;
+
+        ${{
+            root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "increase_row_count",
+                    patternId: root.lookup("currentPattern").value() - 1
+                }
+            );
+        }}$
+    }
+
+    when(lenminus_click) {
+        upDown = false;
+        do :project > ResizeRow;
+
+        ${{
+            root.lookup("engine_node").value().port.postMessage(
+                {
+                    type: "decrease_row_count",
+                    patternId: root.lookup("currentPattern").value() - 1
+                }
+            );
+        }}$
+    }
 }
 
 action InitSampleEditEvents {
@@ -1652,6 +1671,64 @@ action InitSampleEditEvents {
             if (newLoopPoint > samplePool[currentSample + 1].loopFrom)
                 samplePool[currentSample + 1].loopTo = newLoopPoint;
         }
+    }
+
+    # TODO: Give these buttons functionality
+
+    when(sampleplay_click) {
+
+    }
+
+    when(samplestop_click) {
+
+    }
+
+    when(loadinsampleview_click) {
+        createSample("smp");
+    }
+
+    when(clearinsampleview_click) {
+
+    }
+
+    when(samplecopy_click) {
+        
+    }
+
+    when(samplecut_click) {
+
+    }
+
+    when(samplepaste_click) {
+
+    }
+
+    when(samplecrop_click) {
+
+    }
+
+    when(samplezoomin_click) {
+
+    }
+
+    when(samplezoomout_click) {
+
+    }
+
+    when(sampleundo_click) {
+
+    }
+
+    when(sampleredo_click) {
+
+    }
+
+    when(samplereverse_click) {
+
+    }
+
+    when(samplenormalise_click) {
+
     }
 }
 
