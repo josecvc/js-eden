@@ -25,7 +25,18 @@ ctx is initAudioContext();
 gain_node is initGainNode();
 engine_node is null; # this specifically is for holding the engine
 
-samplePool = [];
+samplePool = ${{ {
+        filename: "",
+        sampleRate: 48000,
+        channels: 2,
+        length: 0,
+        waveform: [],
+        loopType: 0,
+        loopFrom: 0,
+        loopTo: 0
+    } 
+}}$ with s is 0..255;
+
 playbackArray = null;
 playheadArray = null;
 
@@ -482,10 +493,12 @@ func addSample {
                 throw new Error("Maximum 2 channels per sample.");
             }
             
+            const sampleId = root.lookup("currentSample").value();
+
             const encoder = new TextEncoder();
             root.lookup("engine_node").value().port.postMessage({
                type: "sample",
-               id: root.lookup("samplePool").value().length,
+               id: sampleId,
                filename: file.name,
                encoded: encoder.encode(file.name),
                channels: data.numberOfChannels,
@@ -494,7 +507,7 @@ func addSample {
                data: [left, right],
             })
 
-            const DOWNSAMPLE = 4096;
+            const DOWNSAMPLE = 1024;
 
             const blockSize = Math.floor(data.length / DOWNSAMPLE);
             const wf = new Float32Array(DOWNSAMPLE);
@@ -515,20 +528,19 @@ func addSample {
                 wf[i] = sum / (end - start);
             }
 
-            root.lookup("samplePool").value().push(
+            console.log(sampleId);        
+
+            root.lookup("samplePool").value()[sampleId] =
                 {
                     filename: file.name,
                     sampleRate: data.sampleRate,
                     channels: data.numberOfChannels,
                     length: data.length,
                     waveform: wf,
-                    leftPtr: data.leftPtr,
-                    rightPtr: data.rightPtr,
-                    loopType: 0,
+                    loopType: 1,
                     loopFrom: 0,
-                    loopTo: 0
-                }
-            )
+                    loopTo: 7000
+                };
 
             root.lookup("sampleDirty").assign(true, root.scope);
         }
@@ -852,6 +864,7 @@ createCanvas("PatternEditor", "editorCanvas", "Klaxon Tracker");
 patternFocus = patternArray[currentPattern];
 
 mouseWheelEnabled = true;
+touchPinchEnabled = true;
 
 view_PatternEditor_width = 1193;
 view_PatternEditor_height = 843;
@@ -1074,9 +1087,9 @@ playheads is Line(playheadPosition, viewportHeight/4 + 40, playheadPosition, vie
 
 # SAMPLE INFORMATION
 
-lengthTxt is round(samplePool[currentSample + 1].length / sampleRate, 3) if (samplePool.length < currentSample) else 0;
-loopStartTxt is round(samplePool[currentSample + 1].loopStart/sampleRate, 3) if (samplePool.length < currentSample) else 0;
-loopLenTxt is round((samplePool[currentSample + 1].loopEnd - samplePool[currentSample + 1].loopStart)/sampleRate, 3) if (samplePool.length < currentSample) else 0;
+lengthTxt is round(samplePool[currentSample + 1].length / sampleRate, 3);
+loopStartTxt is round(samplePool[currentSample + 1].loopFrom/sampleRate, 3);
+loopLenTxt is round((samplePool[currentSample + 1].loopTo - samplePool[currentSample + 1].loopFrom)/sampleRate, 3);
 
 sampleLength is Text("Length: " + lengthTxt + "s", 7/8 * viewportWidth, 8/10 * viewportHeight, fontSize, "#ffffff");
 # sampleLoopType is Text("Loop: " + samplePool[currentSample + 1].loopType, 7/8 * viewportWidth, 8/10*viewportHeight + fontSize, fontSize, "#ffffff");
@@ -1116,19 +1129,21 @@ sampleViewButtons is [
 
 # SAMPLE LOOP DETAILS
 
-loopStartX is samplePool[currentSample + 1].loopStart/samplePool[currentSample + 1].length * viewportWidth;
-loopEndX is samplePool[currentSample + 1].loopEnd/samplePool[currentSample + 1].length * viewportWidth;
+loopStartX is samplePool[currentSample + 1].loopFrom/samplePool[currentSample + 1].length * viewportWidth;
+loopEndX is samplePool[currentSample + 1].loopTo/samplePool[currentSample + 1].length * viewportWidth;
 
 loopStartLine is Line(loopStartX, viewportHeight/4 + 40, loopStartX, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#6b6b6b");
 loopEndLine is Line(loopEndX, viewportHeight/4 + 40, loopEndX, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#6b6b6b");
+
+loopTriY = 3*viewportHeight/4 / 1.5 + viewportHeight/4 + 40;
 
 # use these triangles to query mouse click 
 loopStartHead is Polygon([Point(loopStartX, viewportHeight/4 + 40),
     Point(loopStartX + 30, viewportHeight/4 + 40),
     Point(loopStartX, viewportHeight/4 + 40 + 30)], "#b01f1f");
-loopEndHead is Polygon([Point(loopEndX, 3*viewportHeight/4 / 1.5),
-    Point(loopEndX - 30, 3*viewportHeight/4 / 1.5),
-    Point(loopStartX, 3*viewportHeight/4 / 1.5 - 30)], "#b01f1f");
+loopEndHead is Polygon([Point(loopEndX, loopTriY),
+    Point(loopEndX - 30, loopTriY),
+    Point(loopEndX, loopTriY - 30)], "#b01f1f");
 
 loopLines is [loopStartLine, loopEndLine, loopStartHead, loopEndHead];
 
@@ -1140,7 +1155,7 @@ loopTexts is [loopNoneText, loopForwardText, loopBidiText];
 
 # SAMPLE SELECTION
 
-sampleSelection is Rectangle(selectFrom, viewportHeight/4 + 40, selectTo - selectFrom, 3*viewportHeight/4 / 1.5, "#d0d0d094");
+sampleSelection is Rectangle(selectFrom, viewportHeight/4 + 40, selectTo - selectFrom, 3*viewportHeight/4 / 1.5, "#d0d0d094") if (selectFrom > selectTo || selectTo > selectFrom) else Line(selectFrom, viewportHeight/4 + 40, selectTo, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#feffeaa1");
 
 sampleEditor is [sampleBackground, waveformBackground, waveformMid, waveform, playheads, sampleSelection, loopLines, sampleViewButtons, loopTexts, sampleInformation];
 }
@@ -1216,7 +1231,7 @@ action InitUIEvents {
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= viewportHeight/4);
+    mouseOverCell is currentView == "grid" && (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= viewportHeight/4);
 
     cellScroll = false;
 
@@ -1581,6 +1596,65 @@ action InitUIEvents {
     }
 }
 
+action InitSampleEditEvents {
+    mouseOverWaveform is currentView == "sample" && mouseY >= viewportHeight/4 + 40 && mouseY <= (3*viewportHeight/4 / 1.5 + viewportHeight/4 + 40);
+
+    mouseOverLoopFrom is currentView == "sample" && samplePool[currentSample + 1].loopType != 0 && (draggingLoopFrom || loopFromTri);
+    mouseOverLoopTo is currentView == "sample" && samplePool[currentSample + 1].loopType != 0 && (draggingLoopTo || loopToTri);
+
+    loopFromTri is mouseX > loopStartX && mouseX < loopStartX + 30 && mouseY > viewportHeight/4 + 40 && mouseY < viewportHeight/4 + 40 + 30 && ((mouseX - loopStartX)/30 +  (mouseY - (viewportHeight/4 + 40))/30)/2 <= 0.5;
+    loopToTri is  mouseX < loopEndX && mouseX > loopEndX - 30 && mouseY < loopTriY && mouseY > loopTriY - 30 && ((loopEndX - mouseX)/30 +  (loopTriY - mouseY)/30)/2 <= 0.5;
+
+    when(currentSample + 1) {
+        selectFrom = -1;
+        selectTo = -1;
+    }
+
+    when(mouseDown) {
+        if (mouseOverWaveform && mouseOverLoopFrom) {
+            draggingLoopFrom = true;
+        } else if (mouseOverWaveform && mouseOverLoopTo) {
+            draggingLoopTo = true;
+        }
+
+        if(mouseOverWaveform && !mouseOverLoopFrom && !mouseOverLoopTo && !draggingLoopFrom && !draggingLoopTo) {
+            selectFrom = mouseX;
+            selectTo = selectFrom;
+        }
+    }
+
+    when(mouseUp) {
+        if(mouseOverWaveform && !mouseOverLoopFrom && !mouseOverLoopTo && !draggingLoopFrom && !draggingLoopTo) {
+            selectTo = mouseUp.x;
+
+            if (selectFrom > selectTo) {
+                temp = selectFrom;
+                selectFrom = selectTo;
+                selectTo = temp;
+            }
+        }
+
+        draggingLoopFrom = false;
+        draggingLoopTo = false;
+    }
+
+    when(mouseX) {
+        if (mousePressed && mouseOverWaveform && !mouseOverLoopFrom && !mouseOverLoopTo && !draggingLoopFrom && !draggingLoopTo) {
+            selectTo = mouseX;
+        } else if (mousePressed && mouseOverWaveform && mouseOverLoopFrom && draggingLoopFrom) {
+            newLoopPoint = mouseX/viewportWidth * samplePool[currentSample + 1].length;
+
+            if (newLoopPoint < samplePool[currentSample + 1].loopTo)
+                samplePool[currentSample + 1].loopFrom = newLoopPoint;
+        } else if (mousePressed && mouseOverWaveform && mouseOverLoopTo && draggingLoopTo) {
+            newLoopPoint = mouseX/viewportWidth * samplePool[currentSample + 1].length;
+
+            if (newLoopPoint > samplePool[currentSample + 1].loopFrom)
+                samplePool[currentSample + 1].loopTo = newLoopPoint;
+        }
+    }
+}
+
 action config {
 ## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
@@ -1655,6 +1729,7 @@ action start {
         do :project > MakeInstrumentEditor;
         do :project > MakeSampleEditor;
         do :project > InitUIEvents;
+        do :project > InitSampleEditEvents;
         do :project > SetupListeners;
         do :project > Timing;
     }
@@ -1679,6 +1754,7 @@ action ACTIVE {
     MAX_PATTERNS = 255;
     MAX_CHANNELS = 127;
     MAX_ROWS = 256;
+    MAX_SAMPLES = 256;
 
     NUM_PATTERNS = 255;
     NUM_ROWS = 64;
@@ -1740,8 +1816,14 @@ action ACTIVE {
 
     step = 0;
 
-    selectFrom = 255;
-    selectTo = 1024;
+    draggingLoopFrom = false;
+    draggingLoopTo = false;
+
+    selectFrom = -1;
+    selectTo = -1;
+
+    sampleFrom is floor(selectFrom / viewportWidth * samplePool[currentSample + 1].length);
+    sampleTo is ceil(selectTo / viewportWidth * samplePool[currentSample + 1].length);
 
     is_playing is false;
     order = 0 with i is 1..255;
@@ -1754,6 +1836,9 @@ action ACTIVE {
 
     numSamplePlayheads = 0;
     numEnvelopePlayheads = 0;
+
+    tempFrom = 0;
+    tempTo = 0;
 
     instrument_list = InstrumentList("instrument_list");
 }

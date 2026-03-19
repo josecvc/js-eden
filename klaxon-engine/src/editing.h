@@ -8,13 +8,12 @@
 
 #include "sample.h"
 
-
-
 enum class SampleOperation : int
 {
     CUT,
     PASTE,
     CROP,
+    CLEAR,
     REVERSE,
     NORMALISE
 };
@@ -76,9 +75,13 @@ public:
     void copy(int sample_id, Sample* sample, uint32_t from, uint32_t to, Clipboard& clipboard);
     void paste(int sample_id, Sample* sample, uint32_t from, uint32_t to, Clipboard& clipboard);
     void crop(int sample_id, Sample* sample, uint32_t from, uint32_t to);
+    void clear(int sample_id, Sample* sample);
 
     void reverse(int sample_id, Sample* sample, uint32_t from, uint32_t to);
     void normalise(int sample_id, Sample* sample, uint32_t from, uint32_t to);
+
+    void undo();
+    void redo();
 
     History edit_history;
 };

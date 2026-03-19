@@ -11,13 +11,19 @@ add_executable(dsp
     src/instrument.cpp
     src/miniaudio.cpp
     src/pattern.cpp
+    src/editing.cpp
     src/engine.cpp
 )
 
 set_target_properties(dsp PROPERTIES SUFFIX ".wasm")
 
+target_compile_options(dsp PRIVATE
+    "-flto"
+)
+
 target_link_options(dsp PRIVATE
     "--no-entry"
+    "-sSTANDALONE_WASM=1"
     "-sEXPORTED_FUNCTIONS=[
     '_malloc', 
     '_free', 
@@ -65,5 +71,6 @@ target_link_options(dsp PRIVATE
     "-O3"
     "-msimd128"
     "-sALLOW_MEMORY_GROWTH=0"
-    "-sINITIAL_MEMORY=64MB"
+    "-sINITIAL_MEMORY=512MB"
+    "-flto"
 )

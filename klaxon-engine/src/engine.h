@@ -2,16 +2,19 @@
 #define ENGINE_H
 
 #include <vector>
+#include <array>
 #include <memory>
 
 #include "instrument.h"
 #include "pattern.h"
 #include "polyphony.h"
+#include "editing.h"
 
 class Engine
 {
 public:
     static constexpr int MAX_INSTRUMENTS = 128;
+    static constexpr int MAX_SAMPLES = 256;
     static constexpr int ROW = 0;
     static constexpr int PATTERN = 1;
     static constexpr int ORDER = 2;
@@ -46,7 +49,7 @@ public:
     void set_ticks_per_row(int ticks_per_row);
     
     // instruments
-    int register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    int register_sample(const char *filename, float *left, float *right, int sample_rate, unsigned long length, int sample_id);
     int register_synth();
 
     void remove_instrument(int instrument_id);
@@ -79,13 +82,16 @@ public:
     
     PatternInfo pattern_info;
 
+    SampleEditor editor;
+    Clipboard clipboard;
+
     // Channel data (last command used, channel audio information)
     ChannelData channels[MAX_CHANNELS];
 
     Instrument instruments[MAX_INSTRUMENTS];
-    std::vector<std::unique_ptr<Sample>> sample_pool;
+    std::array<std::unique_ptr<Sample>, MAX_SAMPLES> sample_pool;
 
     Polyphony poly;
 };
 
-#endif 
+#endif

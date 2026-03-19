@@ -205,14 +205,14 @@ void Engine::set_ticks_per_row(int ticks_per_row)
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.0  / 24 / bpm;
 }
 
-int Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
+int Engine::register_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length, int sample_id)
 {
+    if (sample_id < 0 || sample_id >= MAX_SAMPLES) return -1;
+    
     auto sample = std::make_unique<Sample>();
     sample->load_sample(filename, left, right, sample_rate, length);
 
-    sample_pool.push_back(std::move(sample));
-
-    int sample_id = sample_pool.size() - 1;
+    sample_pool[sample_id] = std::move(sample);
 
     int id = 0;
 
@@ -352,10 +352,10 @@ extern "C"
         engine->set_ticks_per_row(ticks_per_row);
     }
 
-    int register_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate)
+    int register_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate, int sample_id)
     {
         if (!engine) return -1;
-        return engine->register_sample(filename, left, right, sample_rate, length);
+        return engine->register_sample(filename, left, right, sample_rate, length, sample_id);
     }
 
     void remove_instrument(Engine* engine, int instrument_id)
@@ -645,6 +645,8 @@ extern "C"
 
         engine->current_sample = sample_id;
         engine->current_instrument = instrument_id;
+
+        return 0;
     }
 
     //TODO: Finish WebAssembly functions

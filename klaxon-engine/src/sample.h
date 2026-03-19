@@ -1,7 +1,7 @@
 #ifndef SAMPLE_H
 #define SAMPLE_H
 
-#include <vector>
+#include <memory>
 #include <string>
 #include <cstdint>
 
@@ -22,11 +22,8 @@ public:
     std::string filename;
 
     // raw PCM
-    float* left; 
-    float* right;
-
-    // std::vector<float[]> left;
-    // std::vector<float[]> right;
+    std::unique_ptr<float[]> left;
+    std::unique_ptr<float[]> right;
 
     uint32_t length;
     int channels;

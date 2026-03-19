@@ -171,7 +171,7 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     addSample(msg) {
-        console.log(msg);
+        // console.log(msg);
         // pointers and heaps to memory
         const lAudioPtr = this.wasm.exports.malloc(msg.data[0].length * Float32Array.BYTES_PER_ELEMENT);
         const rAudioPtr = this.wasm.exports.malloc(msg.data[0].length * Float32Array.BYTES_PER_ELEMENT);
@@ -193,17 +193,15 @@ class MixerProcessor extends AudioWorkletProcessor {
 
         const stringPtr = this.stringToCharPointer(msg.encoded);
 
-        // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate)
-        const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate);
+        // // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate, int sample_id)
+        const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate, msg.sampleId);
 
-        console.log(res);
+        console.log("Sample Load Status: " + res);
 
         this.port.postMessage({
             type: "sample",
             id: msg.id,
             filename: msg.filename,
-            leftPtr: lAudioPtr,
-            rightPtr: rAudioPtr,
             sampleRate: msg.sampleRate,
             channels: msg.channels,
             length: msg.duration
