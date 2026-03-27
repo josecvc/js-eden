@@ -69,7 +69,23 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.setAsSample(msg);
             } else if (msg.type == "instrument_synth") {
                 this.setAsSynth(msg);
-            }
+            } else if (msg.type == "sample_cut") {
+                this.cutSample(msg);
+            } else if (msg.type == "sample_copy") {
+                this.copySample(msg);
+            } else if (msg.type == "sample_paste") {
+                this.pasteSample(msg);
+            } else if (msg.type == "sample_crop") {
+                this.cropSample(msg);
+            } else if (msg.type == "sample_reverse") {
+                this.reverseSample(msg);
+            } else if (msg.type == "sample_normalise") {
+                this.normSample(msg);
+            } else if (msg.type == "sample_undo") {
+                this.undoSample(msg);
+            } else if (msg.type == "sample_redo") {
+                this.redoSample(msg);
+            } 
         };
     }
 
@@ -295,6 +311,38 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     setAsSynth(msg) {
         this.wasm.exports.set_instrument_synth(this.enginePtr, msg.instrumentId);
+    }
+
+    cutSample(msg) {
+
+    }
+
+    copySample(msg) {
+
+    }
+
+    pasteSample(msg) {
+
+    }
+
+    cropSample(msg) {
+
+    }
+
+    reverseSample(msg) {
+
+    }
+
+    normSample(msg) {
+
+    }
+
+    undoSample(msg) {
+
+    }
+
+    redoSample(msg) {
+        
     }
 
     process(ins, outs, parameters) {

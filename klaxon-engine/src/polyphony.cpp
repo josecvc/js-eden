@@ -1,6 +1,8 @@
-#include "polyphony.h"
+#include "polyphony.h" 
 #include "instrument.h"
 #include "utils.h"
+
+// #include <wasm_simd128.h>
 
 void Polyphony::init()
 {

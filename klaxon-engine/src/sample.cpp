@@ -1,13 +1,21 @@
 #include "sample.h"
+#include <cstdint>
 #include <memory>
 
-//TODO: TEST THIS PLEASE
-void Sample::load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length)
+void Sample::init(uint32_t length)
+{
+    this->left = std::make_unique<float[]>(length);
+    this->right = std::make_unique<float[]>(length);
+
+    std::memset(left.get(), 0, length * sizeof(float));
+    std::memset(right.get(), 0, length * sizeof(float));
+}
+
+void Sample::load_sample(const char* filename, float* left, float* right, int sample_rate, uint32_t length)
 {   
     this->filename = std::string(filename);
 
-    this->left = std::make_unique<float[]>(length);
-    this->right = std::make_unique<float[]>(length);
+    this->init(length);
 
     std::memcpy(this->left.get(), left, length * sizeof(float));
     std::memcpy(this->right.get(), right, length * sizeof(float));

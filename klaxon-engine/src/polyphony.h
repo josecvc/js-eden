@@ -1,4 +1,4 @@
-#ifndef POLYPHONY_H
+#ifndef POLYPHONY_H 
 #define POLYPHONY_H
 
 #include "instrument.h"

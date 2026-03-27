@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <cstdint>
+#include "editing.h"
 
 enum class LoopType : int
 {
@@ -17,7 +18,8 @@ class Sample
 public:
     Sample() {}
 
-    void load_sample(const char* filename, float* left, float* right, int sample_rate, unsigned long length);
+    void init(uint32_t length);
+    void load_sample(const char* filename, float* left, float* right, int sample_rate, uint32_t length);
 
     std::string filename;
 
@@ -37,6 +39,8 @@ public:
     LoopType loop_type{LoopType::NONE};
     uint32_t loop_from;
     uint32_t  loop_to;
+
+    History edit_history;
 };
 
 #endif

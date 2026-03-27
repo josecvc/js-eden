@@ -657,5 +657,37 @@ extern "C"
         return engine->pattern_info.patterns[pattern_id].num_rows;
     }
 
+    int cut_sample(Engine* engine, int sample_id, int from, int to)
+    {
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        EditResult res = engine->editor.cut(sample_id, smp, from, to, engine->clipboard);
+
+        return static_cast<int>(res);
+    }
+
+    int copy_sample(Engine* engine, int sample_id, int from, int to)
+    {
+        
+    }
+
+    int paste_sample(Engine* engine, int sample_id, int from, int to)
+    {
+        
+    }
+
+    int crop_sample(Engine* engine, int sample_id, int from, int to)
+    {
+        
+    }
+
+    int reverse_sample(Engine* engine, int sample_id, int from, int to)
+    {
+
+    }
+
     //TODO: Finish WebAssembly functions
 }

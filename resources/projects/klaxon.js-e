@@ -1698,19 +1698,39 @@ action InitSampleEditEvents {
     }
 
     when(samplecopy_click) {
-        
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_copy",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplecut_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_cut",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplepaste_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_paste",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplecrop_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_crop",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplezoomin_click) {
@@ -1722,19 +1742,39 @@ action InitSampleEditEvents {
     }
 
     when(sampleundo_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_undo",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(sampleredo_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_redo",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplereverse_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_reverse",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 
     when(samplenormalise_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_normalise",
+                sampleId: root.lookup("currentSample").value()
+            });
+        }}$
     }
 }
 
