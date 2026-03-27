@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "pattern.h"
+#include "utils.h"
 
 void Engine::init(int sample_rate, int bpm, int ticks_per_row)
 {
@@ -657,6 +658,18 @@ extern "C"
         return engine->pattern_info.patterns[pattern_id].num_rows;
     }
 
+    int set_view(Engine* engine, int sample_id, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES || instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -1;
+        engine->current_instrument = instrument_id;
+        engine->current_sample = sample_id;
+
+        return 0;
+    }
+
+    // Wasm Sample Operations
+
     int cut_sample(Engine* engine, int sample_id, int from, int to)
     {
         if (!engine) return -2;
@@ -671,22 +684,121 @@ extern "C"
 
     int copy_sample(Engine* engine, int sample_id, int from, int to)
     {
-        
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        EditResult res = engine->editor.copy(sample_id, smp, from, to, engine->clipboard);
+
+        return static_cast<int>(res);
     }
 
     int paste_sample(Engine* engine, int sample_id, int from, int to)
     {
-        
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        EditResult res = engine->editor.paste(sample_id, smp, from, to, engine->clipboard);
+
+        return static_cast<int>(res);
     }
 
     int crop_sample(Engine* engine, int sample_id, int from, int to)
     {
-        
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        EditResult res = engine->editor.crop(sample_id, smp, from, to);
+
+        return static_cast<int>(res);
     }
 
     int reverse_sample(Engine* engine, int sample_id, int from, int to)
     {
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
 
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        EditResult res = engine->editor.reverse(sample_id, smp, from, to);
+
+        return static_cast<int>(res);
+    }
+
+    // Wasm sample get/set
+
+    int get_sample_length(Engine* engine, int sample_id)
+    {
+        if (!engine) return -2;
+
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+
+        return smp->length;
+    }
+
+    int get_sample_loop_from(Engine* engine, int sample_id)
+    {
+        if (!engine) return -2;
+
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+
+        return smp->loop_from;
+    }
+
+    int get_sample_loop_to(Engine* engine, int sample_id)
+    {
+        if (!engine) return -2;
+
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+
+        return smp->loop_to;
+    }
+
+    int get_bins_from_sample(Engine* engine, int sample_id, float* bin_ptr)
+    {
+        if (!engine) return -2;
+        if (!bin_ptr || sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+
+        return get_bins(smp->left.get(), smp->right.get(), bin_ptr, smp->length);
+    }
+
+    int set_loop_type(Engine* engine, int sample_id, int loop_type)
+    {
+        if (!engine) return -2;
+        return 0;
+    }
+
+    int set_loop_from(Engine* engine, int sample_id, int from)
+    {
+        if (!engine) return -2;
+        return 0;
+    }
+
+    int set_loop_to(Engine* engine, int sample_id, int to)
+    {
+        if (!engine) return -2;
+        return 0;
     }
 
     //TODO: Finish WebAssembly functions

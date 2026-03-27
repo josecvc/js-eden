@@ -26,3 +26,8 @@ void Sample::load_sample(const char* filename, float* left, float* right, int sa
     std::free(left);
     std::free(right);
 }
+
+void History::push(SampleSnapshot snap)
+{
+    history.push_back(std::move(snap));
+}

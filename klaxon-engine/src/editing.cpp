@@ -221,7 +221,6 @@ EditResult SampleEditor::crop(int sample_id, Sample* sample, uint32_t from, uint
 
     // snap!
     sample->edit_history.push(std::move(snap));
-
     return EditResult::OK;
 }
 
@@ -266,15 +265,15 @@ EditResult SampleEditor::reverse(int sample_id, Sample* sample, uint32_t from, u
 
 EditResult SampleEditor::normalise(int sample_id, Sample* sample, uint32_t from, uint32_t to)
 {
-
+    return EditResult::OK;
 }
 
 EditResult SampleEditor::undo(int sample_id, Sample* sample)
 {
-
+    return EditResult::OK;
 }
 
 EditResult SampleEditor::redo(int sample_id, Sample* sample)
 {
-
+    return EditResult::OK;
 }

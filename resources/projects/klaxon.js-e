@@ -83,6 +83,13 @@ ${{
                 root.lookup("playheadArray").assign(
                     new Int32Array(data.playheadBuffer), root.scope
                 );
+            } else if (data.type == "waveform") {
+                const sample_pool = root.lookup("samplePool").value();
+
+                sample_pool[data.sampleId].waveform = data.wf;
+                sample_pool[data.sampleId].length = data.length;
+                sample_pool[data.sampleId].loopFrom = data.loopFrom;
+                sample_pool[data.sampleId].loopTo = data.loopTo;
             }
         };
 
@@ -522,9 +529,7 @@ func addSample {
                 for (let j = start; j < end; j++) sum += monoform[j];
 
                 wf[i] = sum / (end - start);
-            }
-
-            console.log(sampleId);        
+            }       
 
             root.lookup("samplePool").value()[sampleId] =
                 {
@@ -548,6 +553,7 @@ func addSample {
 func Sample {
     para obsName
 
+    # TODO: Please do this within the canvas instead
     createView("hidden", "HTMLContent");
     view_hidden_title = "Hidden input";
     view_hidden_visibility = "hidden";
@@ -1084,7 +1090,7 @@ loopEndHead is Polygon([Point(loopEndX, loopTriY),
     Point(loopEndX - 30, loopTriY),
     Point(loopEndX, loopTriY - 30)], "#b01f1f");
 
-loopLines is [loopStartLine, loopEndLine, loopStartHead, loopEndHead];
+loopLines is [loopStartLine, loopEndLine, loopStartHead, loopEndHead] if (samplePool[currentSample + 1].loopType != 0) else [];
 
 loopNoneText is Text("No Loop", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, fontSize, "#ffffff");
 loopForwardText is Text("Forward", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + fontSize, fontSize, "#ffffff");
@@ -1192,11 +1198,25 @@ action InitUIEvents {
 
         if (mouseButton == "Left down" && mouseOverInstrument) {
             currentInstrument = mouseHoverInstrumentList + 1;
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "set_view",
+                    sampleId: root.lookup("currentSample").value(),
+                    instrumentId: root.lookup("currentInstrument").value() - 1
+                });
+            }}$
         }
 
         if (mouseButton == "Left down" && mouseOverSample) {
             
             currentSample = mouseHoverSampleList;
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "set_view",
+                    sampleId: root.lookup("currentSample").value(),
+                    instrumentId: root.lookup("currentInstrument").value() - 1
+                });
+            }}$
         }
     }
 
@@ -1701,7 +1721,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_copy",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1710,7 +1732,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_cut",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1728,7 +1752,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_crop",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1745,7 +1771,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_undo",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1754,7 +1782,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_redo",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1763,7 +1793,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_reverse",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1772,7 +1804,9 @@ action InitSampleEditEvents {
         ${{
             root.lookup("engine_node").value().port.postMessage({
                 type: "sample_normalise",
-                sampleId: root.lookup("currentSample").value()
+                sampleId: root.lookup("currentSample").value(),
+                from: root.lookup("sampleFrom").value(),
+                to: root.lookup("sampleTo").value()
             });
         }}$
     }
@@ -1948,7 +1982,7 @@ action ACTIVE {
     selectTo = -1;
 
     sampleFrom is floor(selectFrom / viewportWidth * samplePool[currentSample + 1].length);
-    sampleTo is ceil(selectTo / viewportWidth * samplePool[currentSample + 1].length);
+    sampleTo is ceil(selectTo / viewportWidth * samplePool[currentSample + 1].length) if (selectTo != selectFrom) else sampleFrom;
 
     is_playing is false;
     order = 0 with i is 1..255;

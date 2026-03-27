@@ -17,16 +17,6 @@ enum class EditResult : int
     NO_EDIT
 };
 
-enum class SampleOperation : int
-{
-    CUT,
-    PASTE,
-    CROP,
-    CLEAR,
-    REVERSE,
-    NORMALISE
-};
-
 struct Clipboard
 {
     // TODO: Remove variant, switch to destructive editing
@@ -37,28 +27,7 @@ struct Clipboard
     bool empty() const { return  length == 0 || !left || !right; }
 };
 
-struct SampleSnapshot
-{
-    SampleOperation op;
 
-    uint32_t from{0};
-    uint32_t to{0};
-
-    std::unique_ptr<float[]> left;
-    std::unique_ptr<float[]> right;
-    uint32_t length{0};
-};
-
-struct History
-{
-    static constexpr int MAX_UNDO = 16;
-    std::vector<SampleSnapshot> history;
-    int cursor{-1};
-
-    void push(SampleSnapshot snap);
-    void undo();
-    void redo();
-};
 
 class SampleEditor 
 {

@@ -16,6 +16,7 @@ const ORDER = 2;
 const IS_PLAYING = 3;
 
 const MAX_VOICES = 64;
+const DOWNSAMPLE = 1024;
 
 class MixerProcessor extends AudioWorkletProcessor {
     constructor() {
@@ -85,7 +86,9 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.undoSample(msg);
             } else if (msg.type == "sample_redo") {
                 this.redoSample(msg);
-            } 
+            } else if (msg.type == "set_view") {
+                this.setView(msg);
+            }
         };
     }
 
@@ -126,6 +129,13 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.HEAPU32[(this.outputTablePtr >> 2) + 0] = this.leftPtr;
                 this.HEAPU32[(this.outputTablePtr >> 2) + 1] = this.rightPtr;
 
+                this.waveformPtr = this.wasm.exports.malloc(DOWNSAMPLE * 4);
+                this.waveformHeap = new Float32Array(
+                    this.wasm.exports.memory.buffer,
+                    this.waveformPtr,
+                    DOWNSAMPLE
+                );
+
                 /*
                 void init_engine(
                     Engine* engine, 
@@ -149,7 +159,10 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.rowNo = 0;
                 this.patternNo = 0;
                 this.b = 0;
-                
+            
+                this.waveformBuffer = new ArrayBuffer(DOWNSAMPLE * Float32Array.BYTES_PER_ELEMENT);
+                this.waveformArray = new Float32Array(this.waveformBuffer);
+
                 this.playbackBuffer = new SharedArrayBuffer(4 * Int32Array.BYTES_PER_ELEMENT);
                 this.playbackArray = new Int32Array(this.playbackBuffer);
 
@@ -161,7 +174,7 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.port.postMessage({
                     type: "sab",
                     sharedBuffer: this.playbackBuffer,
-                    playheadBuffer: this.playheadBuffer
+                    playheadBuffer: this.playheadBuffer,
                 });
 
                 this.samplePool = [];
@@ -210,7 +223,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         const stringPtr = this.stringToCharPointer(msg.encoded);
 
         // // int add_sample(Engine* engine, const char* filename, float* left, float* right, int length, int sample_rate, int sample_id)
-        const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate, msg.sampleId);
+        const res = this.wasm.exports.register_sample(this.enginePtr, stringPtr, lAudioPtr, rAudioPtr, msg.duration, msg.sampleRate, msg.id);
 
         console.log("Sample Load Status: " + res);
 
@@ -313,16 +326,44 @@ class MixerProcessor extends AudioWorkletProcessor {
         this.wasm.exports.set_instrument_synth(this.enginePtr, msg.instrumentId);
     }
 
-    cutSample(msg) {
+    updateSample(msg) {
+        const res = this.wasm.exports.get_bins_from_sample(this.enginePtr, msg.sampleId, this.waveformPtr);
+           
+        if (res == 0) {
+            this.waveformArray.set(this.waveformHeap);
+            const length = this.wasm.exports.get_sample_length(this.enginePtr, msg.sampleId);
+            const loopFrom = this.wasm.exports.get_sample_loop_from(this.enginePtr, msg.sampleId);
+            const loopTo = this.wasm.exports.get_sample_loop_to(this.enginePtr, msg.sampleId);
 
+            this.port.postMessage({
+                type: "waveform",
+                sampleId: msg.sampleId,
+                wf: this.waveformArray,
+                length: length,
+                loopFrom: loopFrom,
+                loopTo: loopTo
+            })
+
+            console.log("OK!");
+        }
+    }
+
+    cutSample(msg) {
+        const res = this.wasm.exports.cut_sample(this.enginePtr, msg.sampleId, msg.from, msg.to);
+        console.log("Cut Status: " + res);
+        if (res == 0) // only send new waveform data when successful edit
+        {
+            this.updateSample(msg);
+        }
     }
 
     copySample(msg) {
-
+        const res = this.wasm.exports.copy_sample(this.enginePtr, msg.sampleId, msg.from, msg.to);
+        console.log(res);
     }
 
     pasteSample(msg) {
-
+        
     }
 
     cropSample(msg) {
@@ -342,7 +383,12 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     redoSample(msg) {
-        
+
+    }
+
+    setView(msg) {
+        const res = this.wasm.exports.set_view(this.enginePtr, msg.sampleId, msg.instrumentId);
+        console.log(res);
     }
 
     process(ins, outs, parameters) {
@@ -370,6 +416,7 @@ class MixerProcessor extends AudioWorkletProcessor {
         const sPlayheadPtr = this.wasm.exports.get_sample_playhead_ptr(this.enginePtr) >> 2;
         const ePlayheadPtr = this.wasm.exports.get_envelope_playhead_ptr(this.enginePtr) >> 2;
 
+        // give playhead statistics to JS-EDEN
         for(let i = 0; i < MAX_VOICES; i++) {
             Atomics.store(this.playheadArray, i, this.playheadRead[sPlayheadPtr + i]);
             Atomics.store(this.playheadArray, MAX_VOICES + i, this.playheadRead[ePlayheadPtr + i]);

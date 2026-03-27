@@ -4,13 +4,46 @@
 #include <memory>
 #include <string>
 #include <cstdint>
-#include "editing.h"
+#include <vector>
 
 enum class LoopType : int
 {
     NONE,
     FORWARD,
     BIDI
+};
+
+enum class SampleOperation : int
+{
+    CUT,
+    PASTE,
+    CROP,
+    CLEAR,
+    REVERSE,
+    NORMALISE
+};
+
+struct SampleSnapshot
+{
+    SampleOperation op;
+
+    uint32_t from{0};
+    uint32_t to{0};
+
+    std::unique_ptr<float[]> left;
+    std::unique_ptr<float[]> right;
+    uint32_t length{0};
+};
+
+struct History
+{
+    static constexpr int MAX_UNDO = 16;
+    std::vector<SampleSnapshot> history;
+    int cursor{-1};
+
+    void push(SampleSnapshot snap);
+    void undo();
+    void redo();
 };
 
 class Sample 
