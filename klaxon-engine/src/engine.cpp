@@ -158,10 +158,12 @@ void Engine::advance_row()
 {   
     process_row();
     current_row++;
-    if (current_row >= this->pattern_info.patterns[this->current_pattern].num_rows) { // 0 -> (current num_rows - 1)
+    if (current_row >= this->pattern_info.patterns[this->current_pattern].num_rows) 
+    { // 0 -> (current num_rows - 1)
         current_row = 0;
     
-        if(++current_order >= pattern_info.num_orders) {
+        if(++current_order >= pattern_info.num_orders) 
+        {
             is_playing = false;
             current_order = 0;
             current_samples = 0;
@@ -173,8 +175,60 @@ void Engine::advance_row()
 
 void Engine::process_effects(int row_tick)
 {
+    auto& pat = pattern_info.patterns[current_pattern];
+
+    int rowStart = current_row * pattern_info.num_channels;
+    for(int ch = 0; ch < pattern_info.num_channels; ch++)
+    {
+        int idx = rowStart + ch;
+        Cell& cell = pat.cells[idx];
+
+        switch(cell.effect)
+        {   
+            case 'A':
+                arpeggio(cell.param);
+                break;
+            case 'B':
+                slide_volume(cell.param);
+                break;
+            case 'C':
+                sample_offset(cell.param);
+                break;
+            case 'D':
+                portamento( cell.param);
+                break;
+            case 'E':
+                slide_pitch(cell.param);
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void Engine::arpeggio(uint8_t param)
+{
+
+}
+
+void Engine::slide_volume(uint8_t param)
+{
     
-    return;
+}
+
+void Engine::portamento(uint8_t param)
+{
+    
+}
+
+void Engine::sample_offset(uint8_t param)
+{
+    
+}
+
+void slide_pitch(uint8_t param)
+{
+    
 }
 
 void Engine::play(int order_num, int row_num)
@@ -200,7 +254,8 @@ void Engine::stop()
     current_order = 0;
     current_ticks = 0;
 
-    for(int i=0; i < Polyphony::MAX_VOICES; i++) {
+    for(int i=0; i < Polyphony::MAX_VOICES; i++) 
+    {
         poly.remove_voice(poly.voices[i].channel_id, poly.voices[i].note_id, poly.voices[i].instrument_id);
     }
 

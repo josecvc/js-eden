@@ -59,6 +59,13 @@ public:
 
     Sample* get_sample(Instrument& instrument, int note_id);
 
+    // effects
+    void arpeggio(uint8_t params);
+    void slide_volume(uint8_t params);
+    void sample_offset(uint8_t params);
+    void portamento(uint8_t params);
+    void slide_pitch(uint8_t params);
+    
     // timing attributes
     int bpm;
     int sample_rate;
