@@ -184,6 +184,8 @@ int PatternInfo::resize_channel_count_by_two(bool up_down)
                 new_cells[start_row_new + ch] = pattern.cells[start_row_old + ch];
             }
         }
+        
+        // std::memcpy(new_cells, pattern.cells, channel_ride * pattern.num_rows * sizeof(Cell));
 
         delete[] pattern.cells;
         pattern.cells = new_cells;
@@ -217,6 +219,8 @@ int PatternInfo::resize_row_by_one(int pattern_id, bool up_down)
             new_cells[idx] = pattern.cells[idx];
         }
     }
+
+    // std::memcpy(new_cells, pattern.cells, this->num_channels * row_min * sizeof(Cell));
 
     delete[] pattern.cells;
 

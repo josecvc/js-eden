@@ -28,6 +28,8 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.initProcessor(msg)
             } else if (msg.type == "sample") {
                 this.addSample(msg);
+            } else if (msg.type == "sample_clear") {
+                this.clearSample(msg);
             } else if (msg.type == "note_on") {
                 this.playMidi(msg);
             } else if (msg.type == "note_off") {
@@ -70,6 +72,10 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.setAsSample(msg);
             } else if (msg.type == "instrument_synth") {
                 this.setAsSynth(msg);
+            } else if (msg.type == "sample_play") {
+                this.playSample(msg);
+            } else if (msg.type == "sample_stop") {
+                this.stopSample(msg);
             } else if (msg.type == "sample_cut") {
                 this.cutSample(msg);
             } else if (msg.type == "sample_copy") {
@@ -88,6 +94,12 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.redoSample(msg);
             } else if (msg.type == "set_view") {
                 this.setView(msg);
+            } else if (msg.type == "set_loop_type") {
+                this.setLoopType(msg);
+            } else if (msg.type == "set_loop_from") {
+                this.setLoopFrom(msg);
+            } else if (msg.type == "set_loop_to") {
+                this.setLoopTo(msg);
             }
         };
     }
@@ -239,6 +251,10 @@ class MixerProcessor extends AudioWorkletProcessor {
         this.wasm.exports.free(stringPtr);
     }
 
+    clearSample(msg) {
+        const res = this.wasm.exports.clear_sample(this.enginePtr, msg.sampleId);
+    }
+
     emplaceNote(msg) {
         this.wasm.exports.set_note(this.enginePtr, msg.noteId, msg.patternId, msg.rowId, msg.channelId);
     }
@@ -267,6 +283,15 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     stopMidi(msg) {
         const res = this.wasm.exports.stop_from_midi(this.enginePtr, msg.instrumentId, msg.note);
+    }
+
+    playSample(msg) {
+        const res = this.wasm.exports.play_sample(this.enginePtr, msg.instrumentId, msg.sampleId);
+        console.log("Sample Play status: " + res);
+    }
+
+    stopSample(msg) {
+        const res = this.wasm.exports.stop_sample(this.enginePtr, msg.instrumentId, msg.sampleId);
     }
 
     setBPM(msg) {
@@ -363,15 +388,30 @@ class MixerProcessor extends AudioWorkletProcessor {
     }
 
     pasteSample(msg) {
-        
+        const res = this.wasm.exports.paste_sample(this.enginePtr, msg.sampleId, msg.from, msg.to);
+        console.log("Paste Status: " + res);
+        if (res == 0) // only send new waveform data when successful edit
+        {
+            this.updateSample(msg);
+        }
     }
 
     cropSample(msg) {
-
+        const res = this.wasm.exports.crop_sample(this.enginePtr, msg.sampleId, msg.from, msg.to);
+        console.log("Crop Status: " + res);
+        if (res == 0) // only send new waveform data when successful edit
+        {
+            this.updateSample(msg);
+        }
     }
 
     reverseSample(msg) {
-
+        const res = this.wasm.exports.reverse_sample(this.enginePtr, msg.sampleId, msg.from, msg.to);
+        console.log("Reverse Status: " + res);
+        if (res == 0) // only send new waveform data when successful edit
+        {
+            this.updateSample(msg);
+        }
     }
 
     normSample(msg) {
@@ -388,7 +428,19 @@ class MixerProcessor extends AudioWorkletProcessor {
 
     setView(msg) {
         const res = this.wasm.exports.set_view(this.enginePtr, msg.sampleId, msg.instrumentId);
-        console.log(res);
+    }
+
+    setLoopType(msg) {
+        const res = this.wasm.exports.set_loop_type(this.enginePtr, msg.sampleId, msg.loopType);
+        console.log("Loop Type status: " + res);
+    }
+
+    setLoopFrom(msg) {
+        const res = this.wasm.exports.set_loop_from(this.enginePtr, msg.sampleId, msg.loopFrom);
+    }
+
+    setLoopTo(msg) {
+        const res = this.wasm.exports.set_loop_to(this.enginePtr, msg.sampleId, msg.loopTo);
     }
 
     process(ins, outs, parameters) {

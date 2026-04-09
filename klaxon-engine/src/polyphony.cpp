@@ -124,10 +124,10 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
     {   
         int p = static_cast<int>(voice.position);
 
-        if (p >= voice.sample->length - 1) {
-            voice.finished = true;
-            break;
-        }
+        // if (p >= voice.sample->length - 1) {
+        //     voice.finished = true;
+        //     break;
+        // }
 
         double frac = voice.position - p;
         
@@ -175,7 +175,7 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
                 voice.backwards = true;
             } else if (voice.backwards && voice.position <= voice.sample->loop_from) 
             {
-                double overshoot =voice.sample->loop_from - voice.position;
+                double overshoot = voice.sample->loop_from - voice.position;
                 voice.position = voice.sample->loop_from + overshoot;
                 voice.backwards = false;
             }

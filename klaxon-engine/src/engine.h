@@ -31,6 +31,7 @@ public:
     // playback
     int process(float** output, int frames);
     void mix_instruments(float** output, int frames);
+    void hard_clip(float** output, int frames);
     void clear(float** output, int frames);
     int step(int frames);
     void advance_tick();
@@ -53,6 +54,7 @@ public:
     int register_synth();
 
     void remove_instrument(int instrument_id);
+    int clear_sample(int sample_id);
     int switch_instrument_type(int instrument_id, InstrumentType type);
 
     Sample* get_sample(Instrument& instrument, int note_id);

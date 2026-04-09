@@ -1,7 +1,6 @@
 #include "editing.h"
 #include <cstring>
 #include <memory>
-#include <variant>
 #include "sample.h"
 
 EditResult SampleEditor::cut(int sample_id, Sample* sample, uint32_t from, uint32_t to, Clipboard& clipboard)
@@ -23,11 +22,13 @@ EditResult SampleEditor::cut(int sample_id, Sample* sample, uint32_t from, uint3
     std::memcpy(cut_left.get(), sample->left.get() + from, cut_length * sizeof(float));
     std::memcpy(cut_right.get(), sample->right.get() + from, cut_length * sizeof(float));
 
-    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(cut_length);
-    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(cut_length);
+    // snapshot old sample
+    
+    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(sample->length);
+    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(sample->length);
 
-    std::memcpy(snap_left.get(), cut_left.get(), cut_length * sizeof(float));
-    std::memcpy(snap_right.get(), cut_right.get(), cut_length * sizeof(float));
+    std::memcpy(snap_left.get(), sample->left.get(), sample->length * sizeof(float));
+    std::memcpy(snap_right.get(), sample->right.get(), sample->length * sizeof(float));
 
     // save snapshot of operation and insert into history
 
@@ -55,6 +56,9 @@ EditResult SampleEditor::cut(int sample_id, Sample* sample, uint32_t from, uint3
 
     std::memcpy(new_right.get(), sample->right.get(), from * sizeof(float));
     std::memcpy(new_right.get() + from, sample->right.get() + to, (sample->length - to) * sizeof(float));
+
+    // adjust loop points
+    
 
     sample->left = std::move(new_left);
     sample->right = std::move(new_right);
@@ -97,6 +101,7 @@ EditResult SampleEditor::copy(int sample_id, Sample* sample, uint32_t from, uint
 
     return EditResult::OK;
 }
+
 EditResult SampleEditor::paste(int sample_id, Sample* sample, uint32_t from, uint32_t to, Clipboard& clipboard)
 {
     /**
@@ -188,23 +193,18 @@ EditResult SampleEditor::crop(int sample_id, Sample* sample, uint32_t from, uint
     uint32_t new_length = to - from;
     uint32_t cropped_out_length = from + (old_length - to);
 
-    // snapshot the cropped out region
+    // snapshot the old data
     SampleSnapshot snap;
     
-    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(cropped_out_length);
-    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(cropped_out_length);
+    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(sample->length);
+    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(sample->length);
 
-    // append (0 -> from)
-    std::memcpy(snap_left.get(), sample->left.get(), from * sizeof(float));
-    std::memcpy(snap.right.get(), sample->right.get(), from * sizeof(float));
-
-    // append (to -> sample->length)
-    std::memcpy(snap_left.get() + from, sample->left.get() + to, (old_length - to) * sizeof(float));
-    std::memcpy(snap_right.get() + from, sample->right.get() + to, (old_length - to) * sizeof(float));
+    std::memcpy(snap_left.get(), sample->left.get(), sample->length * sizeof(float));
+    std::memcpy(snap_right.get(), sample->right.get(), sample->length * sizeof(float));
 
     snap.from = from;
     snap.to = to;
-    snap.length = cropped_out_length;
+    snap.length = sample->length;
     snap.op = SampleOperation::CROP;
     snap.left = std::move(snap_left);
     snap.right = std::move(snap_right);
@@ -237,15 +237,15 @@ EditResult SampleEditor::reverse(int sample_id, Sample* sample, uint32_t from, u
 
     SampleSnapshot snap;
     
-    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(rev_tween);
-    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(rev_tween);
+    std::unique_ptr<float[]> snap_left = std::make_unique<float[]>(sample->length);
+    std::unique_ptr<float[]> snap_right = std::make_unique<float[]>(sample->length);
 
-    std::memcpy(snap_left.get(), sample->left.get() + from, rev_tween * sizeof(float));
-    std::memcpy(snap_right.get(), sample->right.get() + from, rev_tween * sizeof(float));
+    std::memcpy(snap_left.get(), sample->left.get() + from, sample->length * sizeof(float));
+    std::memcpy(snap_right.get(), sample->right.get() + from, sample->length * sizeof(float));
 
     snap.from = from;
     snap.to = to;
-    snap.length = rev_tween;
+    snap.length = sample->length;
     snap.op = SampleOperation::REVERSE;
     snap.left = std::move(snap_left); 
     snap.right = std::move(snap_right);

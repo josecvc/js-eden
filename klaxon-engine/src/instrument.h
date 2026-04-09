@@ -28,7 +28,6 @@ public:
     int add_point();
     int delete_point(int point_id);
 
-
     int sustain_at;
     int loop_from;
     int loop_to;
@@ -40,7 +39,7 @@ public:
 struct SampleInstrument
 {
     static constexpr int MAX_NOTES = 128;
-    int note_sample[MAX_NOTES];  // note → sample_id (0->119)
+    int note_sample[MAX_NOTES];  // note -> sample_id (0->119)
 };
 
 struct SynthInstrument

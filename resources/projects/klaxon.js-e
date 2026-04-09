@@ -5,11 +5,11 @@
  */
 
 func initAudioContext {
-        ${{
-            const audio_context = new AudioContext();
-            return audio_context;
-        }}$;
-    }
+    ${{
+        const audio_context = new AudioContext();
+        return audio_context;
+    }}$;
+}
 
 func initGainNode {
     ${{
@@ -210,18 +210,15 @@ ${{
         if (e.shiftKey || e.ctrlKey) return;
 
         const octave = root.lookup("octave").value();
-        const gridFocus = root.lookup("gridFocus");
 
         if(keyToNote.hasOwnProperty(code)) {
             keysDown.delete(code);
 
-            if(gridFocus.value()) { // this is so we dont have to hear the audio play fully when adding data to the grid
-                root.lookup("engine_node").value().port.postMessage({
+            root.lookup("engine_node").value().port.postMessage({
                 type: "note_off",
                 note: keyToNote[code] + (octave + 1) * 12,
                 instrumentId: root.lookup("currentInstrument").value()
             })
-            }
         }
     })
 
@@ -437,12 +434,6 @@ Sample = function(obsName) {
 }}$;
 
 ${{
-Synth = function(obsName) {
-    this.obsName = obsName;
-}
-}}$;
-
-${{
 InstrumentList = function(obsName) {
     this.obsName = obsName;
     this.instruments = [];
@@ -450,13 +441,6 @@ InstrumentList = function(obsName) {
 }}$;
 
 # DEFINITIONS
-func Synth {
-    para obsName
-    
-    ${{
-        return new Synth();
-    }}$
-}
 
 func InstrumentList {
     para obsName
@@ -464,7 +448,6 @@ func InstrumentList {
         return new InstrumentList(obsName);
     }}$
 }
-
 
 func addSample {
     ${{
@@ -538,9 +521,9 @@ func addSample {
                     channels: data.numberOfChannels,
                     length: data.length,
                     waveform: wf,
-                    loopType: 1,
+                    loopType: 0,
                     loopFrom: 0,
-                    loopTo: 7000
+                    loopTo: 0
                 };
 
             root.lookup("sampleDirty").assign(true, root.scope);
@@ -566,10 +549,6 @@ func Sample {
         return new Sample(o);
     }}$
 }
-
-${{
-    
-}}$
 
 proc createSample {
     para obsName
@@ -602,7 +581,6 @@ func setNote {
     para val, pattern, row, channel
     ${{
         // in this pattern, in this row, in this channel at cell.noteId
-        root.lookup("patternArray").value()[pattern][row][channel][0] = val;
         root.lookup("engine_node").value().port.postMessage({
             type: "note_set", 
             noteId: val,
@@ -611,14 +589,12 @@ func setNote {
             channelId: channel 
         });
     }}$
-    patternDirty = true;
 }
 
 func setInstrument {
     para val, pattern, row, channel
     ${{
         // in this pattern, in this row, in this channel at cell.instrumentId
-        root.lookup("patternArray").value()[pattern][row][channel][1] = val;
         root.lookup("engine_node").value().port.postMessage({
             type: "instr_set", 
             instrumentId: val,
@@ -627,14 +603,12 @@ func setInstrument {
             channelId: channel 
         });
     }}$
-    patternDirty = true;
 }
 
 func setVolume {
     para val, pattern, row, channel
     ${{
         // in this pattern, in this row, in this channel at cell.volume
-        root.lookup("patternArray").value()[pattern][row][channel][2] = val;
         root.lookup("engine_node").value().port.postMessage({
             type: "vol_set", 
             volume: val,
@@ -643,14 +617,12 @@ func setVolume {
             channelId: channel 
         });
     }}$
-    patternDirty = true;
 }
 
 func setEffect {
     para val, pattern, row, channel
     ${{
         // in this pattern, in this row, in this channel at cell.effectId
-        root.lookup("patternArray").value()[pattern][row][channel][3] = val;
         root.lookup("engine_node").value().port.postMessage({
             type: "effect_set", 
             noteId: val,
@@ -659,14 +631,12 @@ func setEffect {
             channelId: channel 
         });
     }}$
-    patternDirty = true;
 }
 
 func setParam {
     para val, pattern, row, channel
     ${{
         // in this pattern, in this row, in this channel at cell.param
-        root.lookup("patternArray").value()[pattern][row][channel][4] = val;
         root.lookup("engine_node").value().port.postMessage({
             type: "param_set", 
             param: val,
@@ -675,14 +645,13 @@ func setParam {
             channelId: channel 
         });
     }}$
-    patternDirty = true;
 }
 
 ## ROW/CHANNEL COUNT
 
 action InsertOrder {
     if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
-        if (patternOrder[currentOrder + 1] != 255) {
+        if (patternOrder[currentOrder + 1 + 1] != 255) {
             for(i = numOrders; i > currentOrder; i--) {
                 patternOrder[i] = patternOrder[i - 1];
             }
@@ -695,7 +664,7 @@ action InsertOrder {
 
 action DeleteOrder {
     if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
-         for (i = position; i < numOrders; i++)
+        for (i = position; i < numOrders; i++)
         {  
             patternOrder[i] = patternOrder[i + 1];
         }
@@ -733,7 +702,6 @@ action ResizeChannels {
             }
 
             root.lookup("numChannels").assign(newCount, root.scope);
-            root.lookup("patternDirty").assign(true, root.scope);
         }
     }}$
 }
@@ -760,7 +728,7 @@ action ResizeRow {
 }
 
 action ExpandPattern {
-    tempPattern = patternArray[currentPattern];
+    tempPattern = patternArray[currentPattern ];
 
     oldCount = patternRows[currentPattern];
     newCount = patternRows[currentPattern] * 2;
@@ -803,7 +771,7 @@ action ShrinkPattern {
 action MakeUI {
 # Set up canvas
 createCanvas("PatternEditor", "editorCanvas", "Klaxon Tracker");
-patternFocus = patternArray[currentPattern];
+patternFocus is patternArray[currentPattern];
 
 mouseWheelEnabled = true;
 touchPinchEnabled = true;
@@ -868,8 +836,8 @@ orderDelButton is Button("orderdelete", "Del.", buttonSize*2, viewportHeight/8, 
 sampleLoadButton is Button("sampleload", "Load", 3*viewportWidth/4 + fontSize*4, 0, buttonSize*2, buttonSize);
 sampleClearButton is Button("sampleclear", "Clear", 3*viewportWidth/4 + buttonSize*2 + fontSize*4, 0, buttonSize*2, buttonSize);
 
-stepPlusButton is Button("stepplus", "+");
-stepMinusButton is Button("stepminus", "-");
+stepPlusButton is Button("stepplus", "+", buttonSize*4*4 + 50 + fontSize*4, viewportHeight/8 + buttonSize*1.25, buttonSize, buttonSize);
+stepMinusButton is Button("stepminus", "-", buttonSize*4*4 + 50 + fontSize*4 + buttonSize, viewportHeight/8 + buttonSize*1.25, buttonSize, buttonSize);
 
 # PATTERN MUTATION BUTTONS
 expandButton is Button("expandpat", "Expand", buttonSize*4*2, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
@@ -878,8 +846,16 @@ shrinkButton is Button("shrinkpat", "Shrink", buttonSize*4*2, viewportHeight/8 +
 addChanButton is Button("addchan", "Add Chan.", buttonSize*4*3, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
 subChanButton is Button("subchan", "Sub Chan.", buttonSize*4*3, viewportHeight/8 + buttonSize + buttonSize * 1.5, buttonSize * 4, buttonSize * 1.5);
 
-lenPlusButton is Button("lenplus", "+");
-lenMinusButton is Button("lenminus", "-");
+lenPlusButton is Button("lenplus", "+", buttonSize*4*4 + 50 + fontSize*4, viewportHeight/8 + buttonSize*1.25 + buttonSize, buttonSize, buttonSize);
+lenMinusButton is Button("lenminus", "-", buttonSize*4*4 + 50 + fontSize*4 + buttonSize, viewportHeight/8 + buttonSize*1.25 + buttonSize, buttonSize, buttonSize);
+
+# ORDER MUTATION BUTTONS
+
+orderPlusButton is Button("orderplus", "+", viewportWidth/12, 0, buttonSize, buttonSize);
+orderMinusButton is Button("orderminus", "-", viewportWidth/12 + buttonSize, 0, buttonSize, buttonSize);
+
+orderUpButton is Button("orderup", "U", viewportWidth/12, buttonSize, buttonSize, buttonSize);
+orderDownButton is Button("orderdown", "D", viewportWidth/12 + buttonSize, buttonSize, buttonSize, buttonSize);
 
 sampleEditButton is Button("sampleedit", "Smp Edit", buttonSize*4, viewportHeight/8 + buttonSize, buttonSize*4, buttonSize * 1.5);
 
@@ -889,7 +865,9 @@ buttons is [playButton, stopButton, tempoPlusButton, tempoMinusButton,
     speedPlusButton, speedMinusButton, patternPlusButton, patternMinusButton, 
     orderInsertButton, orderDelButton, sampleLoadButton, sampleClearButton,
     sampleEditButton, instrumentEditButton, octavePlusButton, octaveMinusButton,
-    expandButton, shrinkButton, addChanButton, subChanButton
+    expandButton, shrinkButton, addChanButton, subChanButton,
+    stepPlusButton, stepMinusButton, lenPlusButton, lenMinusButton,
+    orderPlusButton, orderMinusButton, orderUpButton, orderDownButton
 ];
 
 # Div("<h1></h1>", 0, 0, 1, 1, "font: serif");
@@ -905,11 +883,10 @@ patternIDTxt is Text("Pattern: " + (currentPattern - 1), viewportWidth/4 + butto
 
 octaveText is Text("Octave: " + octave, viewportWidth/4 + buttonSize, viewportHeight/14 + fontSize, fontSize, "white", "#CBE5D4");
 
-stepText is Text("Step: " + step);
+stepText is Text("Step: " + step, buttonSize*4*4 + 30, viewportHeight/8 + buttonSize + 10, fontSize, "white", "#CBE5D4");
+lengthText is Text("Rows: " + patternRows[currentPattern], buttonSize*4*4 + 30, viewportHeight/8 + buttonSize + 10 + fontSize, fontSize, "white", "#CBE5D4");
 
-rowCountText is Text("Rows: " + patternRows[currentPattern]);
-
-information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator];
+information is [titleText, tempoText, speedText, patternIDTxt, octaveText, instrIndicator, sampleIndicator, stepText, lengthText];
 
 # Order Rendering
 seqClassifier is "0" + s if(s < 10) else s;
@@ -994,7 +971,6 @@ volText    is Text(volClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 2
 effectText is Text(effectClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 3  + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 3 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
 paramText is Text(paramClassifier, ch*cellWidth + gridOffset[1] + cellWidth/5 * 4 + cellWidth/15, r*cellHeight + gridOffset[2], 22 * scale, "white" if (keyboardRowFocus == r && keyboardChannelFocus == ch && keyboardElementFocus == 4 && gridFocus) else "black") with ch is 0..(numChannels - 1), r is 0..(patternRows[currentPattern] - 1);
 
-
 # KEYBOARD FOCUS
 cellFocus is Rectangle(keyboardChannelFocus*cellWidth + keyboardElementFocus*cellWidth/5 +  gridOffset[1], gridOffset[2] +  keyboardRowFocus * cellHeight, cellWidth / 5, cellHeight, "#00000000" if (!gridFocus) else "rgb(0, 0, 0)");
 
@@ -1015,9 +991,6 @@ grid is [gridBase, cellFocus, noteText, instrText, volText, effectText, paramTex
 }
 
 action MakeSampleEditor {
-# grab waveform data and display it (we dont know how to)
-# I guess we can just use tiny rectangles and blit them onto the screen according to the size
-
 sampleBackground is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4, "#424242");
 waveformBackground is Rectangle(0, viewportHeight/4 + 40, viewportWidth, 3*viewportHeight/4 / 1.5, "#000000");
 
@@ -1056,20 +1029,23 @@ sampleCutButton is Button("samplecut", "Cut", 2*viewportWidth/12, 8/10 * viewpor
 samplePasteButton is Button("samplepaste", "Paste", 2*viewportWidth/12 + buttonSize*4, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
 sampleCropButton is Button("samplecrop", "Crop", 2*viewportWidth/12 + buttonSize*4, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
 
-sampleZoomIn is Button("samplezoomin", "Zoom In", 4*viewportWidth/12, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
-sampleZoomOut is Button("samplezoomout", "Zoom Out", 4*viewportWidth/12, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+sampleReverseButton is Button("samplereverse", "Reverse", 4*viewportWidth/12, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
+sampleNormaliseButton is Button("samplenormalise", "Normalise", 4*viewportWidth/12, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
 
 sampleUndoButton is Button("sampleundo", "Undo", 5*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
 sampleRedoButton is Button("sampleredo", "Redo", 5*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
 
-sampleReverseButton is Button("samplereverse", "Reverse", 6*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, buttonSize*4, buttonSize*2.8);
-sampleNormaliseButton is Button("samplenormalise", "Normalise", 6*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize*2.8, buttonSize*4, buttonSize*2.8);
+loopSelect is "O" if (samplePool[currentSample + 1].loopType == t) else "X";
+
+loopNoneButton is Button("sampleloopnone", loopSelect, 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, buttonSize/8, buttonSize/8) with t is 0;
+loopForwardButton is Button("sampleloopforward", loopSelect, 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize, buttonSize/8, buttonSize/8) with t is 1;
+loopBidiButton is Button("sampleloopbidi", loopSelect, 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + buttonSize * 2, buttonSize/8, buttonSize/8) with t is 2;
 
 sampleViewButtons is [
     samplePlayButton, sampleStopButton, sampleLoadDedicatedButton, sampleClearDedicatedButton,
     sampleCopyButton, sampleCutButton, samplePasteButton, sampleCropButton,
-    sampleZoomIn, sampleZoomOut, sampleUndoButton, sampleRedoButton,
-    sampleReverseButton, sampleNormaliseButton
+    sampleReverseButton, sampleNormaliseButton, sampleUndoButton, sampleRedoButton,
+    loopNoneButton, loopForwardButton, loopBidiButton
 ];
 
 # SAMPLE LOOP DETAILS
@@ -1092,9 +1068,9 @@ loopEndHead is Polygon([Point(loopEndX, loopTriY),
 
 loopLines is [loopStartLine, loopEndLine, loopStartHead, loopEndHead] if (samplePool[currentSample + 1].loopType != 0) else [];
 
-loopNoneText is Text("No Loop", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight, fontSize, "#ffffff");
-loopForwardText is Text("Forward", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + fontSize, fontSize, "#ffffff");
-loopBidiText is Text("Bidi", 7*viewportWidth/12 + buttonSize/2.8, 8/10 * viewportHeight + fontSize*2, fontSize, "#ffffff");
+loopNoneText is Text("No Loop", 7*viewportWidth/12 + buttonSize*2, 8/10 * viewportHeight, fontSize, "#ffffff");
+loopForwardText is Text("Forward", 7*viewportWidth/12 + buttonSize*2, 8/10 * viewportHeight + fontSize, fontSize, "#ffffff");
+loopBidiText is Text("Bidi", 7*viewportWidth/12 + buttonSize*2, 8/10 * viewportHeight + fontSize*2, fontSize, "#ffffff");
 
 loopTexts is [loopNoneText, loopForwardText, loopBidiText];
 
@@ -1176,7 +1152,7 @@ action InitUIEvents {
 
     mouseHoverElement is floor((mouseX - gridOffset[1])/(cellWidth / 5)) % 5;
 
-    mouseOverCell is currentView == "grid" && (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern + 1] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= viewportHeight/4);
+    mouseOverCell is currentView == "grid" && (mouseHoverRow >= 0 && mouseHoverRow <= patternRows[currentPattern] && mouseHoverChannel >= 0 && mouseHoverChannel <= numChannels && mouseY >= viewportHeight/4);
 
     cellScroll = false;
 
@@ -1192,8 +1168,6 @@ action InitUIEvents {
                 keyboardChannelFocus = channelFocus;
                 keyboardRowFocus = rowFocus;
             }
-
-            ${{console.log(root.lookup("elementFocus").value())}}$
         }
 
         if (mouseButton == "Left down" && mouseOverInstrument) {
@@ -1271,9 +1245,14 @@ action InitUIEvents {
     when(elementDirty) {
         if(currentElement == 0) { # note
             setNote(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][1] = elementValue;
+
 
             setInstrument(currentInstrument, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][2] = currentInstrument;
+
             setVolume(100, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][3] = 100;
         } else if (currentElement == 1) { # instrument
             temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
 
@@ -1290,6 +1269,7 @@ action InitUIEvents {
             }
 
             setInstrument(temp, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][2] = temp;
         } else if (currentElement == 2) { # volume
             temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
 
@@ -1306,8 +1286,10 @@ action InitUIEvents {
             }
 
             setVolume(temp, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][3] = temp;
         } else if (elementFocus == 3) { # effect
             setEffect(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][4] = elementValue;
         } else if (elementFocus == 4) { # param
            temp = patternFocus[keyboardRowFocus + 1][keyboardChannelFocus + 1][currentElement + 1];
 
@@ -1324,43 +1306,44 @@ action InitUIEvents {
             }
 
             setParam(elementValue, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+            patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][5] = elementValue;
         }
 
-        currentRow = (currentRow + step) % patternRows[currentPattern];
-    }
-
-    when(currentPattern) {
-        patternFocus = patternArray[currentPattern];
-    }
-
-    when(patternDirty) {
-        if(patternDirty) {
-            patternFocus = patternArray[currentPattern];
-            patternDirty = false;
-        }
-    }
-
-    when(currentRow) {
-        patternFocus = patternArray[currentPattern];
+        keyboardRowFocus = (currentRow + step) % patternRows[currentPattern];
     }
 
     # button states
     when(patternplus_click) {
-        if(patternplus_click && currentPattern < 255) {
+        if(currentPattern < 255) {
             currentPattern++;
         }
     }
 
     when(patternminus_click) {
-        if(patternminus_click && currentPattern > 1) {
+        if(currentPattern > 1) {
             currentPattern--;
         }
     }
 
     when(sampleload_click) {
-        if(sampleload_click) {
-            createSample("smp");
-        }
+        createSample("smp");
+    }
+
+    when(sampleclear_click) {
+        samplePool[currentSample + 1].filename = "";
+        samplePool[currentSample + 1].length = 0;
+        samplePool[currentSample + 1].channels = 0;
+        samplePool[currentSample + 1].waveform = [];
+        samplePool[currentSample + 1].loopType = 0;
+        samplePool[currentSample + 1].loopFrom = 0;
+        samplePool[currentSample + 1].loopTo = 0;
+
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_clear",
+                sampleId: root.lookup("currentSample").value()
+            })
+        }}$
     }
 
     when(sampleDirty) {
@@ -1471,7 +1454,7 @@ action InitUIEvents {
     }
 
     when(orderdelete_click) {
-        if(numOrders > 0) {
+        if(numOrders > 1) {
 
             numOrders--;
             # dispatch to wasm
@@ -1479,10 +1462,42 @@ action InitUIEvents {
             ${{
                 root.lookup("engine_node").value().port.postMessage({
                     type: "delete_order",
-                    pos: root.lookup("currentOrder").value()
+                    pos: root.lookup("currentOrder").value(),
                     patternId: root.lookup("currentPattern").value() - 1
                 })
             }}$
+            currentOrder--;
+
+            if (currentOrder < 0)
+                currentOrder = 0;
+        }
+    }
+
+    when(orderplus_click) {
+        if (patternOrder[currentOrder + 1] < 254) {
+            patternOrder[currentOrder + 1] = patternOrder[currentOrder + 1] + 1;
+            currentPattern++
+        }
+    }
+
+    when(orderminus_click) {
+        if (patternOrder[currentOrder + 1] > 0) {
+            patternOrder[currentOrder + 1] = patternOrder[currentOrder + 1] - 1;
+            currentPattern--;
+        }
+    }
+
+    when(orderup_click) {
+        if (currentOrder > 0) {
+            currentOrder--;
+            currentPattern = patternOrder[currentOrder + 1] + 1;
+        }
+    }
+
+    when(orderdown_click) {
+        if (currentOrder < 254 && patternOrder[(currentOrder + 1) + 1] != 255) {
+            currentOrder++;
+            currentPattern = patternOrder[currentOrder + 1] + 1;
         }
     }
 
@@ -1547,16 +1562,22 @@ action InitUIEvents {
         currentElement is keyboardElementFocus;
     }
 
-    when(deleteDirty) {
+    when(deleteDirty) { # deleteDirty triggered from JS key event
         # check the current element, remove from JS-EDEN array (set to 0)
         # dispatch message to AWP and remove from WASM array
-        ${{console.log("Deleted!")}}$;
+
+        patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][1] = 0;
+        patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][2] = 0;
+        patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][3] = 0;
+        patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][4] = 0;
+        patternArray[currentPattern][keyboardRowFocus + 1][keyboardChannelFocus + 1][5] = 0;
 
         setNote(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         setInstrument(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         setVolume(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         setEffect(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
         setParam(0, currentPattern - 1, keyboardRowFocus, keyboardChannelFocus);
+
         deleteDirty = false;
     }
 
@@ -1614,7 +1635,7 @@ action InitUIEvents {
 
     when(lenplus_click) {
         upDown = true;
-        do :project > ResizeRow;
+        do ResizeRow;
 
         ${{
             root.lookup("engine_node").value().port.postMessage(
@@ -1628,7 +1649,7 @@ action InitUIEvents {
 
     when(lenminus_click) {
         upDown = false;
-        do :project > ResizeRow;
+        do ResizeRow;
 
         ${{
             root.lookup("engine_node").value().port.postMessage(
@@ -1687,26 +1708,56 @@ action InitSampleEditEvents {
         if (mousePressed && mouseOverWaveform && !mouseOverLoopFrom && !mouseOverLoopTo && !draggingLoopFrom && !draggingLoopTo) {
             selectTo = mouseX;
         } else if (mousePressed && mouseOverWaveform && mouseOverLoopFrom && draggingLoopFrom) {
-            newLoopPoint = mouseX/viewportWidth * samplePool[currentSample + 1].length;
+            newLoopPoint = floor(mouseX/viewportWidth * samplePool[currentSample + 1].length);
 
-            if (newLoopPoint < samplePool[currentSample + 1].loopTo)
+            if (newLoopPoint < samplePool[currentSample + 1].loopTo) {
                 samplePool[currentSample + 1].loopFrom = newLoopPoint;
-        } else if (mousePressed && mouseOverWaveform && mouseOverLoopTo && draggingLoopTo) {
-            newLoopPoint = mouseX/viewportWidth * samplePool[currentSample + 1].length;
 
-            if (newLoopPoint > samplePool[currentSample + 1].loopFrom)
+                ${{
+                    root.lookup("engine_node").value().port.postMessage({
+                        type: "set_loop_from",
+                        loopFrom: root.lookup("newLoopPoint").value()
+                    })
+                }}$
+            }
+                
+        } else if (mousePressed && mouseOverWaveform && mouseOverLoopTo && draggingLoopTo) {
+            newLoopPoint = ceil(mouseX/viewportWidth * samplePool[currentSample + 1].length);
+
+            if (newLoopPoint > samplePool[currentSample + 1].loopFrom) {
                 samplePool[currentSample + 1].loopTo = newLoopPoint;
+
+                ${{
+                    root.lookup("engine_node").value().port.postMessage({
+                        type: "set_loop_to",
+                        loopTo: root.lookup("newLoopPoint").value()
+                    })
+                }}$
+            }
+                
         }
     }
 
     # TODO: Give these buttons functionality
 
     when(sampleplay_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type:"sample_play",
+                sampleId: root.lookup("currentSample").value(),
+                instrumentId: root.lookup("currentInstrument").value()
+            })
+        }}$
     }
 
     when(samplestop_click) {
-
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type:"sample_stop",
+                sampleId: root.lookup("currentSample").value(),
+                instrumentId: root.lookup("currentInstrument").value()
+            })
+        }}$
     }
 
     when(loadinsampleview_click) {
@@ -1714,7 +1765,20 @@ action InitSampleEditEvents {
     }
 
     when(clearinsampleview_click) {
+        samplePool[currentSample + 1].filename = "";
+        samplePool[currentSample + 1].length = 0;
+        samplePool[currentSample + 1].channels = 0;
+        samplePool[currentSample + 1].waveform = [];
+        samplePool[currentSample + 1].loopType = 0;
+        samplePool[currentSample + 1].loopFrom = 0;
+        samplePool[currentSample + 1].loopTo = 0;
 
+        ${{
+            root.lookup("engine_node").value().port.postMessage({
+                type: "sample_clear",
+                sampleId: root.lookup("currentSample").value()
+            })
+        }}$
     }
 
     when(samplecopy_click) {
@@ -1759,14 +1823,6 @@ action InitSampleEditEvents {
         }}$
     }
 
-    when(samplezoomin_click) {
-
-    }
-
-    when(samplezoomout_click) {
-
-    }
-
     when(sampleundo_click) {
         ${{
             root.lookup("engine_node").value().port.postMessage({
@@ -1809,6 +1865,60 @@ action InitSampleEditEvents {
                 to: root.lookup("sampleTo").value()
             });
         }}$
+    }
+
+    when(sampleloopnone_click) {
+        if (samplePool[currentSample + 1].loopType != 0) {
+            samplePool[currentSample + 1].loopType = 0;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "set_loop_type",
+                    sampleId: root.lookup("currentSample").value(),
+                    loopType: 0
+                });
+            }}$
+        }
+    }
+
+    when(sampleloopforward_click) {
+        if (samplePool[currentSample + 1].loopType != 1) {
+            if (!samplePool[currentSample + 1].loopType) {
+                samplePool[currentSample + 1].loopFrom = 0;
+                samplePool[currentSample + 1].loopTo = samplePool[currentSample + 1].length
+            }
+
+            samplePool[currentSample + 1].loopType = 1;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "set_loop_type",
+                    sampleId: root.lookup("currentSample").value(),
+                    loopType: 1
+                });
+            }}$
+
+            
+        }
+    }
+
+    when(sampleloopbidi_click) {
+        if (samplePool[currentSample + 1].loopType != 2) {
+            if (!samplePool[currentSample + 1].loopType) {
+                samplePool[currentSample + 1].loopFrom = 0;
+                samplePool[currentSample + 1].loopTo = samplePool[currentSample + 1].length
+            }
+
+            samplePool[currentSample + 1].loopType = 2;
+
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "set_loop_type",
+                    sampleId: root.lookup("currentSample").value(),
+                    loopType: 2
+                });
+            }}$
+        }
     }
 }
 
@@ -1867,7 +1977,7 @@ ${{
         if(state) {
             root.lookup("engine_node").value().port.postMessage({
                 type: "playstart",
-                order: root.lookup("pattern_order").value()
+                order: root.lookup("currentOrder").value()
             })
         } else {
             root.lookup("engine_node").value().port.postMessage({
@@ -1880,7 +1990,6 @@ ${{
 
 action start {
     when(wasmReady) {
-        do :project > MakePatterns;
         do :project > MakeUI;
         do :project > MakeGrid;
         do :project > MakeInstrumentEditor;
@@ -1948,7 +2057,6 @@ action ACTIVE {
     currentInstrument = 1;
     currentSample = 0;
 
-    patternDirty = false;
     sampleDirty = true;
     elementDirty = false;
     deleteDirty = false;
@@ -2000,4 +2108,6 @@ action ACTIVE {
     tempTo = 0;
 
     instrument_list = InstrumentList("instrument_list");
+
+    do :project > MakePatterns;
 }

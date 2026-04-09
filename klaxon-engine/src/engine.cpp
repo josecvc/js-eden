@@ -2,6 +2,8 @@
 #include "pattern.h"
 #include "utils.h"
 
+#include <algorithm>
+
 void Engine::init(int sample_rate, int bpm, int ticks_per_row)
 {
     this->sample_rate = sample_rate;
@@ -10,11 +12,15 @@ void Engine::init(int sample_rate, int bpm, int ticks_per_row)
         
     this->samples_per_tick = static_cast<float>(sample_rate) * 60.f  / (bpm * 24); // 24 ticks per minute tempo base
 
-    this->current_samples = 0;
-    this->current_ticks = 0;
-    this->current_row = 0;
-    this->current_pattern = 0;
-    this->current_order = 0;
+    for (int i = 0; i < MAX_INSTRUMENTS; i++)
+    {
+        // instruments[i].sample = SampleInstrument();
+
+        for (int n = 0; n < SampleInstrument::MAX_NOTES; n++)
+        {
+            instruments[i].sample.note_sample[n] = i;
+        }
+    }
 }
 
 Sample* Engine::get_sample(Instrument& inst, int note_id)
@@ -39,8 +45,19 @@ int Engine::process(float** output, int frames)
     }
 
     mix_instruments(output, frames);
+    hard_clip(output, frames);
+
     poly.dump_playheads(sample_playheads, envelope_playheads, current_instrument, current_sample);
     return is_hit;
+}
+
+void Engine::hard_clip(float** output, int frames)
+{
+    for(int i = 0; i < frames; i++)
+    {
+        output[0][i] = std::max(-1.f, std::min(output[0][i], 1.f));
+        output[1][i] = std::max(-1.f, std::min(output[1][i], 1.f));
+    }
 }
 
 void Engine::mix_instruments(float** output, int frames)
@@ -61,11 +78,9 @@ void Engine::mix_instruments(float** output, int frames)
 
 void Engine::clear(float** output, int frames)
 {
-    for (int i = 0; i < frames; i++) // clear buffer
-    {
-        output[0][i] = 0;
-        output[1][i] = 0;
-    }
+    // clear buffer with bulk operation
+    std::memset(output[0], 0, frames * sizeof(float));
+    std::memset(output[1], 0, frames * sizeof(float));    
 }
 
 int Engine::step(int frames)
@@ -126,11 +141,10 @@ void Engine::process_row()
 
         int sample_id;
 
-        if (!smp)
+        if (!smp) 
             sample_id = -1;
-        else {
+        else
             sample_id = inst.sample.note_sample[cell.noteId];
-        }
 
         poly.add_voice(&inst, smp, ch + 1, cell.noteId, cell.instrumentId - 1, sample_id, cell.volume, 72); // "72" needs to be changed afterwards
     }
@@ -155,7 +169,7 @@ void Engine::advance_row()
 
 void Engine::process_effects(int row_tick)
 {
-    // do any command effects in here (probably with a switch case directing to effect methods)
+    
     return;
 }
 
@@ -235,6 +249,8 @@ int Engine::register_sample(const char* filename, float* left, float* right, int
     }
 
     return id;
+
+    return 0;
 }
 
 int Engine::register_synth()
@@ -254,6 +270,19 @@ int Engine::register_synth()
     }
 
     return id;
+}
+
+int Engine::clear_sample(int sample_id)
+{
+    if (sample_id < 0 || sample_id >= MAX_SAMPLES) return -1;
+
+    auto* smp = sample_pool[sample_id].get();
+
+    if(!smp) return -1;
+
+    smp->clear();
+
+    return 0;
 }
 
 void Engine::remove_instrument(int instrument_id)
@@ -355,8 +384,14 @@ extern "C"
 
     int register_sample(Engine* engine, const char* filename, float* left, float* right, unsigned long length, int sample_rate, int sample_id)
     {
-        if (!engine) return -1;
+        if (!engine) return -2;
         return engine->register_sample(filename, left, right, sample_rate, length, sample_id);
+    }
+
+    int clear_sample(Engine* engine, int sample_id)
+    {
+        if (!engine) return -2;
+        return engine->clear_sample(sample_id);
     }
 
     void remove_instrument(Engine* engine, int instrument_id)
@@ -384,6 +419,33 @@ extern "C"
         }
 
         engine->poly.add_voice(&inst, smp, 0, note_id, instrument_id - 1, sample_id, 100.f, 72);
+
+        return 0;
+    }
+
+    int play_sample(Engine* engine, int instrument_id, int sample_id)
+    {
+        if (!engine) return -2;
+        if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
+
+        auto& inst = engine->instruments[instrument_id - 1];
+        if(inst.type == InstrumentType::NONE) return -1;
+
+        Sample* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+
+        engine->poly.add_voice(&inst, smp, 0, 72, instrument_id - 1, sample_id, 100.f, 72);
+
+        return 0;
+    }
+
+    int stop_sample(Engine* engine, int instrument_id, int sample_id)
+    {
+        if (!engine) return -2;
+        if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
+
+        engine->poly.remove_voice(0, 72, instrument_id - 1);
 
         return 0;
     }
@@ -699,9 +761,12 @@ extern "C"
         if (!engine) return -2;
         if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES) return -1;
 
-        auto* smp = engine->sample_pool[sample_id].get();
+        auto& smp_inst = engine->sample_pool[sample_id];
 
-        EditResult res = engine->editor.paste(sample_id, smp, from, to, engine->clipboard);
+        if (!smp_inst)
+            smp_inst = std::make_unique<Sample>();
+
+        EditResult res = engine->editor.paste(sample_id, smp_inst.get(), from, to, engine->clipboard);
 
         return static_cast<int>(res);
     }
@@ -786,19 +851,126 @@ extern "C"
     int set_loop_type(Engine* engine, int sample_id, int loop_type)
     {
         if (!engine) return -2;
+        if(sample_id < 0 || sample_id >= Engine::MAX_SAMPLES) return -1;
+
+        if (loop_type < 0 || loop_type > 2) return -1;
+
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if (!smp) return -1;
+        if (smp->loop_type == LoopType::NONE)
+        {
+            smp->loop_from = 0;
+            smp->loop_to = engine->sample_pool[sample_id]->length;
+        }
+        
+        engine->sample_pool[sample_id]->loop_type = static_cast<LoopType>(loop_type);
+
         return 0;
     }
 
     int set_loop_from(Engine* engine, int sample_id, int from)
     {
         if (!engine) return -2;
+        if(sample_id < 0 || sample_id >= Engine::MAX_SAMPLES) return -1;
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if(!smp || from < 0 || from > smp->loop_to || from > smp->length) return -1;
+        
+        engine->sample_pool[sample_id]->loop_from = from;
         return 0;
     }
 
     int set_loop_to(Engine* engine, int sample_id, int to)
     {
         if (!engine) return -2;
+        if(sample_id < 0 || sample_id >= Engine::MAX_SAMPLES) return -1;
+        auto* smp = engine->sample_pool[sample_id].get();
+
+        if(!smp || to < 0 || to < smp->loop_from || to > smp->length) return -1;
+        
+        engine->sample_pool[sample_id]->loop_to = to;
         return 0;
+    }
+
+    int set_instrument_note_sample(Engine* engine, int instrument_id, int sample_id, int note_id)
+    {
+        if (!engine) return -2;
+        if (sample_id < 0 || sample_id >= engine->MAX_SAMPLES || instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -1;
+        if (note_id < 0 || note_id > SampleInstrument::MAX_NOTES) return -1;
+
+        engine->instruments[instrument_id].sample.note_sample[note_id] = sample_id;
+        
+        return 0;
+    }
+
+    int add_envelope(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        return engine->instruments[instrument_id].envelope.add_point();
+    }
+
+    int delete_envelope(Engine* engine, int instrument_id, int point)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        return engine->instruments[instrument_id].envelope.delete_point(point);
+    }
+
+    int set_envelope_point_value(Engine* engine, int instrument_id, int point, int tick, int vol)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        return engine->instruments[instrument_id].envelope.points[point].tick = tick;
+        return engine->instruments[instrument_id].envelope.points[point].vol = vol;
+    }
+
+    int enable_envelope(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.enabled = true;
+
+        return 0;
+    }
+
+    int disable_envelope(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.enabled = false;
+
+        return 0;
+    }
+
+    int set_envelope_sustain(Engine* engine, int instrument_id, int sustain)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.sustain_at = sustain;
+    }
+
+    int set_envelope_loop_from(Engine* engine, int instrument_id, int from)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.loop_from = from;
+    }
+
+    int set_envelope_loop_to(Engine* engine, int instrument_id, int to)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.loop_from = to;
     }
 
     //TODO: Finish WebAssembly functions

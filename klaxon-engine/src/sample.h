@@ -8,9 +8,9 @@
 
 enum class LoopType : int
 {
-    NONE,
-    FORWARD,
-    BIDI
+    NONE = 0,
+    FORWARD = 1,
+    BIDI = 2
 };
 
 enum class SampleOperation : int
@@ -53,6 +53,7 @@ public:
 
     void init(uint32_t length);
     void load_sample(const char* filename, float* left, float* right, int sample_rate, uint32_t length);
+    void clear();
 
     std::string filename;
 
