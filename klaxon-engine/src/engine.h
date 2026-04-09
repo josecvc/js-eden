@@ -69,6 +69,7 @@ public:
     bool is_playing{false};
 
     double current_samples{0};
+    double current_env_samples{0};
     int current_ticks{0};
     short current_row{0};
     short current_order{0};

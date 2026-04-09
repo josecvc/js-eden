@@ -11,10 +11,10 @@ struct Voice
     int instrument_id;
     int sample_id;
 
-    int env_tick;
-    int env_pos;
-    float env_val;
-    float env_fade;
+    int env_tick{0};
+    int env_pos{0};
+    float env_val{0.f};
+    float env_fade{0.f};
 
     float frequency{440.f};
     float phase{.0f};

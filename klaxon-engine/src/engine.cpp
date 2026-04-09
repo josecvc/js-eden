@@ -47,6 +47,13 @@ int Engine::process(float** output, int frames)
     mix_instruments(output, frames);
     hard_clip(output, frames);
 
+    current_env_samples += frames;
+    while (current_env_samples >= samples_per_tick)
+    {
+        current_env_samples -= samples_per_tick;
+        poly.advance_env_tick();
+    }
+
     poly.dump_playheads(sample_playheads, envelope_playheads, current_instrument, current_sample);
     return is_hit;
 }
@@ -66,14 +73,13 @@ void Engine::mix_instruments(float** output, int frames)
 
     if(poly.get_current_voices() == 0 || instrument_count == 0) return; // edge case, without this you get null calls
 
+    poly.render_voices(output, frames);
+
     for(int v = 0; v < poly.MAX_VOICES; v++) 
     {
         if (poly.voices[v].finished)
             poly.remove_voice(poly.voices[v].channel_id, poly.voices[v].note_id, poly.voices[v].instrument_id);
-        if(!poly.voices[v].active) continue;
     }
-
-    poly.render_voices(output, frames);
 }
 
 void Engine::clear(float** output, int frames)
@@ -113,8 +119,6 @@ void Engine::advance_tick()
     if (row_tick == 0) {
         advance_row();
     }
-
-    poly.advance_env_tick();
 }
 
 void Engine::process_row()
@@ -180,6 +184,7 @@ void Engine::play(int order_num, int row_num)
     current_order = order_num;
     current_row = row_num;
     current_pattern = pattern_info.pattern_order[0];
+    current_ticks = 0;
 }
 
 void Engine::pause()
@@ -418,7 +423,7 @@ extern "C"
             sample_id = inst.sample.note_sample[note_id];
         }
 
-        engine->poly.add_voice(&inst, smp, 0, note_id, instrument_id - 1, sample_id, 100.f, 72);
+        engine->poly.add_voice(&inst, smp, -1, note_id, instrument_id - 1, sample_id, 100.f, 72);
 
         return 0;
     }
@@ -435,7 +440,7 @@ extern "C"
 
         if (!smp) return -1;
 
-        engine->poly.add_voice(&inst, smp, 0, 72, instrument_id - 1, sample_id, 100.f, 72);
+        engine->poly.add_voice(&inst, smp, -1, 72, instrument_id - 1, sample_id, 100.f, 72);
 
         return 0;
     }
@@ -445,7 +450,7 @@ extern "C"
         if (!engine) return -2;
         if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
 
-        engine->poly.remove_voice(0, 72, instrument_id - 1);
+        engine->poly.remove_voice(-1, 72, instrument_id - 1);
 
         return 0;
     }
@@ -454,7 +459,7 @@ extern "C"
     {
         if (!engine) return -2;
         if(instrument_id > engine->instrument_count || instrument_id < 1) return -1;
-        engine->poly.remove_voice(0, note_id, instrument_id - 1);
+        engine->poly.remove_voice(-1, note_id, instrument_id - 1);
 
         return 0;
     }
@@ -904,20 +909,22 @@ extern "C"
         return 0;
     }
 
-    int add_envelope(Engine* engine, int instrument_id)
+    // Envelope
+
+    int add_envelope_point(Engine* engine, int instrument_id, int pos)
     {
         if (!engine) return -2;
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
-        return engine->instruments[instrument_id].envelope.add_point();
+        return engine->instruments[instrument_id].envelope.add_point(pos);
     }
 
-    int delete_envelope(Engine* engine, int instrument_id, int point)
+    int delete_envelope_point(Engine* engine, int instrument_id, int pos)
     {
         if (!engine) return -2;
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
-        return engine->instruments[instrument_id].envelope.delete_point(point);
+        return engine->instruments[instrument_id].envelope.delete_point(pos);
     }
 
     int set_envelope_point_value(Engine* engine, int instrument_id, int point, int tick, int vol)
@@ -925,8 +932,10 @@ extern "C"
         if (!engine) return -2;
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
-        return engine->instruments[instrument_id].envelope.points[point].tick = tick;
-        return engine->instruments[instrument_id].envelope.points[point].vol = vol;
+        engine->instruments[instrument_id].envelope.points[point].tick = tick;
+        engine->instruments[instrument_id].envelope.points[point].vol = vol;
+
+        return 0;
     }
 
     int enable_envelope(Engine* engine, int instrument_id)
@@ -949,12 +958,54 @@ extern "C"
         return 0;
     }
 
+    int enable_envelope_sustain(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.sustain = true;
+
+        return 0;
+    }
+
+    int disable_envelope_sustain(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.sustain = false;
+
+        return 0;
+    }
+    
+    int enable_envelope_loop(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.loop = true;
+
+        return 0;
+    }
+
+    int disable_envelope_loop(Engine* engine, int instrument_id)
+    {
+        if (!engine) return -2;
+        if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
+
+        engine->instruments[instrument_id].envelope.loop = false;
+
+        return 0;
+    }
+
     int set_envelope_sustain(Engine* engine, int instrument_id, int sustain)
     {
         if (!engine) return -2;
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
         engine->instruments[instrument_id].envelope.sustain_at = sustain;
+
+        return 0;
     }
 
     int set_envelope_loop_from(Engine* engine, int instrument_id, int from)
@@ -963,6 +1014,8 @@ extern "C"
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
         engine->instruments[instrument_id].envelope.loop_from = from;
+
+        return 0;
     }
 
     int set_envelope_loop_to(Engine* engine, int instrument_id, int to)
@@ -971,6 +1024,8 @@ extern "C"
         if (instrument_id < 0 || instrument_id >= engine->MAX_INSTRUMENTS) return -2;
 
         engine->instruments[instrument_id].envelope.loop_from = to;
+
+        return 0;
     }
 
     //TODO: Finish WebAssembly functions

@@ -37,6 +37,18 @@ samplePool = ${{ {
     } 
 }}$ with s is 0..255;
 
+instruments = ${{ {
+        sustain: 0,
+        loopFrom: 0,
+        loopTo: 2,
+        fadeout: 200,
+        envelopeEnabled: false,
+        sustainEnabled: false,
+        loopEnabled: false,
+        envelopeCount: 2
+    } 
+}}$ with s is 1..128;
+
 playbackArray = null;
 playheadArray = null;
 
@@ -424,22 +436,6 @@ ${{
     requestAnimationFrame(updatePlayback);
 }}$
 
-${{
-Sample = function(obsName) {
-    this.obsName = obsName;
-    this.duration = 0;
-    this.filename = "";
-    this.sampleRate = 0;
-}
-}}$;
-
-${{
-InstrumentList = function(obsName) {
-    this.obsName = obsName;
-    this.instruments = [];
-}
-}}$;
-
 # DEFINITIONS
 
 func InstrumentList {
@@ -543,23 +539,12 @@ func Sample {
     view_hidden_content = "<input type='file' id='audio-file-input' accept='audio/*' title='Upload Sample'>"
 
     addSample();
-
-    ${{
-        let o = obsName ?? null;
-        return new Sample(o);
-    }}$
 }
 
 proc createSample {
     para obsName
-    smp = Sample(obsName);
+    Sample(obsName);
     addInstrument(smp);
-}
-
-proc createSynth {
-    para obsName
-    synth = Synth(obsName);
-    addInstrument(synth);
 }
 
 func int2hex {
@@ -653,7 +638,8 @@ action InsertOrder {
     if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
         if (patternOrder[currentOrder + 1 + 1] != 255) {
             for(i = numOrders; i > currentOrder; i--) {
-                patternOrder[i] = patternOrder[i - 1];
+                temp = patternOrder[i - 1];
+                patternOrder[i] = temp;
             }
         }
 
@@ -664,9 +650,10 @@ action InsertOrder {
 
 action DeleteOrder {
     if(currentOrder >= 0 && currentOrder < MAX_ORDER) {
-        for (i = position; i < numOrders; i++)
+        for (i = currentOrder; i < numOrders; i++)
         {  
-            patternOrder[i] = patternOrder[i + 1];
+            temp = patternOrder[i + 1];
+            patternOrder[i] = temp;
         }
 
         patternOrder[numOrders] = 255;
@@ -763,6 +750,61 @@ action ShrinkPattern {
 
         patternArray[currentPattern] = newRowCells;
         patternRows[currentPattern] = newCount;
+    }
+}
+
+## ENVELOPE ACTIONS
+
+action AddEnvelope {
+    if(instruments[currentInstrument].envelopeCount != MAX_ENVELOPE_POINTS) {
+        if (pointFocus == instruments[currentInstrument].envelopeCount) {
+            instrumentEnvelopes[currentInstrument][pointFocus+1].active = true;
+            instrumentEnvelopes[currentInstrument][pointFocus+1].tick = instrumentEnvelopes[currentInstrument][pointFocus].tick + 10;
+            instrumentEnvelopes[currentInstrument][pointFocus+1].vol = instrumentEnvelopes[currentInstrument][pointFocus].vol;
+            instruments[currentInstrument].envelopeCount = instruments[currentInstrument].envelopeCount + 1;
+            pointFocus++;
+        } else {
+
+            tempCount = instruments[currentInstrument].envelopeCount;
+
+            for(i = tempCount+1; i > pointFocus; i--) {
+                instrumentEnvelopes[currentInstrument][i].tick = instrumentEnvelopes[currentInstrument][i - 1].tick;
+
+                instrumentEnvelopes[currentInstrument][i].vol = instrumentEnvelopes[currentInstrument][i - 1].vol;
+            }
+
+            instrumentEnvelopes[currentInstrument][pointFocus+1].active = true;
+            instrumentEnvelopes[currentInstrument][pointFocus+1].tick = floor(
+            (instrumentEnvelopes[currentInstrument][pointFocus].tick + 
+            instrumentEnvelopes[currentInstrument][pointFocus+2].tick) / 2
+        );
+            instrumentEnvelopes[currentInstrument][pointFocus+1].vol = instrumentEnvelopes[currentInstrument][pointFocus].vol;
+            instruments[currentInstrument].envelopeCount = instruments[currentInstrument].envelopeCount + 1;
+            pointFocus++;
+        }
+    }
+}
+
+action DeleteEnvelope {
+    if(instruments[currentInstrument].envelopeCount > 2) {
+        if (pointFocus == instruments[currentInstrument].envelopeCount) {
+            instrumentEnvelopes[currentInstrument][pointFocus+1].active = false;
+            instruments[currentInstrument].envelopeCount = instruments[currentInstrument].envelopeCount - 1;
+            pointFocus = min(pointFocus, instruments[currentInstrument].envelopeCount)
+        } else {
+
+            tempCount = instruments[currentInstrument].envelopeCount;
+
+            for(i = pointFocus; i < tempCount; i++) {
+                instrumentEnvelopes[currentInstrument][i].tick = instrumentEnvelopes[currentInstrument][i + 1].tick;
+
+                instrumentEnvelopes[currentInstrument][i].vol = instrumentEnvelopes[currentInstrument][i + 1].vol;
+            }
+
+            instrumentEnvelopes[currentInstrument][tempCount].active = false;
+            instruments[currentInstrument].envelopeCount = instruments[currentInstrument].envelopeCount - 1;
+            pointFocus = min(pointFocus, instruments[currentInstrument].envelopeCount);
+        }
     }
 }
 
@@ -1093,7 +1135,6 @@ pianoScrollBar is Rectangle(viewportHeight/28 + keyScrollHorz, viewportHeight - 
 
 pianoScroll is [pianoScrollView, pianoScrollBar, leftPianoScroll, rightPianoScroll];
 
-
 keyOffset is [-keyScrollHorz, 0];
 
 instrumentBackground is Rectangle(0, viewportHeight/4, viewportWidth, 3*viewportHeight/4, "#424242");
@@ -1113,30 +1154,95 @@ rightBlackKeys is Rectangle(keyOffset[1] + (keyWidth/2 + blackKeyWidth)/2 + keyW
 pianoKeys is [whiteKeys, leftBlackKeys, rightBlackKeys];
 octaves is pianoKeys with octave is 0..7;
 
-# ENVELOPE OPTIONS
-onCheck is Checkbox("envelope_on", "On", viewportWidth/1.5 + 40, viewportHeight/4 + 40 + buttonSize * 2, false);
-sustainCheck is Checkbox("envelope_on", "On", viewportWidth/1.5 + 40, viewportHeight/4 + 40 + buttonSize * 2, false);
+whiteNoteSample is noteSampleMaps[currentInstrument][octave * 12 + whiteKeyOffsets[k + 1] + 1];
+blackNoteSample is noteSampleMaps[currentInstrument][octave * 12 + blackKeyOffsets[k + 1] + 1];
 
-sustainText is Text("Point" + instruments[currentInstrument].sustain);
-loopFromText is Text("Start" + instruments[currentInstrument].loopFrom);
-loopToText is Text("End" + instruments[currentInstrument].loopTo);
+whiteKeyNumbers is Text(whiteNoteSample,
+    keyOffset[1] + keyWidth*k + keyWidth*7*octave + fontSize/3,
+    viewportHeight - keyHeight*1.55 + keyHeight*0.85 - fontSize,
+    fontSize,
+    "#000000"
+) with k is 0..6;
+
+leftBlackKeyNumbers is Text(blackNoteSample,
+    keyOffset[1] + (keyWidth/2 + blackKeyWidth)/2 + keyWidth*k + keyWidth*7*octave,
+    viewportHeight - keyHeight*1.55 + keyHeight*0.35 - fontSize,
+    fontSize,
+    "#FFFFFF"
+) with k is 0..1;
+
+rightBlackKeyNumbers is Text(blackNoteSample,
+    keyOffset[1] + (keyWidth/2 + blackKeyWidth)/2 + keyWidth*k + keyWidth*7*octave,
+    viewportHeight - keyHeight*1.55 + keyHeight*0.35 - fontSize,
+    fontSize,
+    "#FFFFFF"
+) with k is 3..5;
+
+pianoKeyNumbers is [whiteKeyNumbers, leftBlackKeyNumbers, rightBlackKeyNumbers];
+octaveNumbers is pianoKeyNumbers with octave is 0..7;
+
+pianoRoll is [octaves, octaveNumbers];
+# ENVELOPE RENDERING
+
+envTick is instrumentEnvelopes[currentInstrument][p].tick;
+envVol is instrumentEnvelopes[currentInstrument][p].vol;
+envColour is "#710000" if (pointFocus == p) else "#FFFFFF";
+
+# envelopeBackground is Rectangle(40, viewportHeight/4 + 40, viewportWidth / 1.5, viewportHeight/4 + 40, "#000000");
+
+envRects is Rectangle(40 + (envTick * viewportWidth / 1.5)/256, (viewportHeight/4 + 40) + ((101 - envVol)/100) * 3*viewportHeight/4 / 1.5 - 3.25 , 7.5, 7.5, envColour) with p is 1..(instruments[currentInstrument].envelopeCount);
+
+envPts is Point(40 + (envTick * viewportWidth / 1.5)/256, 3.25 + (viewportHeight/4 + 40) + ((100 - envVol)/100) * 3*viewportHeight/4 / 1.5) with p is 1..(instruments[currentInstrument].envelopeCount);
+envSequence is LineSequence(envPts, "#ff6565");
+
+# Line(x1, y1, x2, y2)
+envGridX is Line(40 + (x * viewportWidth / 1.5)/15, viewportHeight/4 + 40, 40 + (x * viewportWidth / 1.5)/15, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#ffffff26") with x is 1..15;
+envGridY is Line(40,viewportHeight/4 + 40 + y * (3*viewportHeight/4 / 1.5)/9, 40 + viewportWidth / 1.5, viewportHeight/4 + 40 + y * (3*viewportHeight/4 / 1.5)/9, "#ffffff26") with y is 1..9;
+
+
+envPlayheadPosition is envelopePlayheads[s + 1]/256 * viewportWidth / 1.5  + 40;
+envPlayheads is Line(envPlayheadPosition, viewportHeight/4 + 40, envPlayheadPosition, viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5, "#cfcfcf") with s is 0..(numEnvelopePlayheads - 1);
+
+envelopeRender is [envGridX, envGridY, envPlayheads, envSequence, envRects];
+
+# ENVELOPE OPTIONS
+enabledText is Text("On", 40 + viewportWidth/1.5 + buttonSize*1.5, viewportHeight/4 + 40 + buttonSize * 3, fontSize, "#ffffff");
+sustainText is Text("Sustain: " + instruments[currentInstrument].sustain, 40 + viewportWidth/1.5 + buttonSize*1.5, viewportHeight/4 + 40 + buttonSize * 3 + fontSize, fontSize, "#ffffff");
+envLoopFromText is Text("Loop From: " + instruments[currentInstrument].loopFrom, 40 + viewportWidth/1.5 + buttonSize*1.5, viewportHeight/4 + 40 + buttonSize * 3 + fontSize*2, fontSize, "#ffffff");
+envLoopToText is Text("Loop To: " + instruments[currentInstrument].loopTo, 40 + viewportWidth/1.5 + buttonSize*1.5, viewportHeight/4 + 40 + buttonSize *3 + fontSize*3, fontSize, "#ffffff");
+
+instrumentText is [enabledText, sustainText, envLoopFromText, envLoopToText];
 
 # ENVELOPE BUTTONS
-sustainPlusButton is Button("sustainplus", "+");
-sustainPlusButton is Button("sustainplus", "-");
 
-loopFromPlusButton is Button("loopfromminus", "+");
-loopFromMinusButton is Button("loopfromplus", "-");
+envelopeState is "O" if (instruments[currentInstrument].envelopeEnabled) else "X";
+envSustainState is "O" if (instruments[currentInstrument].sustainEnabled) else "X";
+envLoopState is "O" if (instruments[currentInstrument].loopEnabled) else "X";
 
-loopToPlusButton is Button("looptoplus", "+");
-loopToMinusButton is Button("looptominus", "-");
+envOnButton is Button("envenabled", envelopeState, 40 + viewportWidth/1.5, viewportHeight/4 + 40 + buttonSize * 3, fontSize);
+sustainOnButton is Button("envsustainenabled", envSustainState, 40 + viewportWidth/1.5, viewportHeight/4 + 40 + buttonSize * 3 + fontSize, fontSize);
+loopOnButton is Button("envloopenabled", envLoopState, 40 + viewportWidth/1.5, viewportHeight/4 + 40 + buttonSize * 3 + fontSize * 2, fontSize);
 
-addButton is Button("add_point", "Add", 40 + viewportWidth/1.5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
-deleteButton is Button("delete_point", "Del", 40 + viewportWidth/1.5 + buttonSize * 5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
+sustainPlusButton is Button("envsustainplus", "+", 40 + viewportWidth/1.5 + buttonSize*8, viewportHeight/4 + 40 + buttonSize * 3 + fontSize, buttonSize, buttonSize);
+sustainMinusButton is Button("envsustainminus", "-", 40 + viewportWidth/1.5 + buttonSize*8 + buttonSize, viewportHeight/4 + 40 + buttonSize * 3 + fontSize, buttonSize, buttonSize);
 
-instrumentButtons is [addButton, deleteButton];
+loopFromPlusButton is Button("envloopfromplus", "+", 40 + viewportWidth/1.5 + buttonSize*8, viewportHeight/4 + 40 + buttonSize * 3 + fontSize + buttonSize, buttonSize, buttonSize);
+loopFromMinusButton is Button("envloopfromminus", "-", 40 + viewportWidth/1.5 + buttonSize*8 + buttonSize, viewportHeight/4 + 40 + buttonSize * 3 + fontSize + buttonSize, buttonSize, buttonSize);
 
-instrEditor is [instrumentBackground, envelopeBackground, instrumentButtons, octaves, onCheck, pianoScroll];
+loopToPlusButton is Button("envlooptoplus", "+", 40 + viewportWidth/1.5 + buttonSize*8, viewportHeight/4 + 40 + buttonSize * 3 + fontSize + buttonSize*2, buttonSize, buttonSize);
+loopToMinusButton is Button("envlooptominus", "-", 40 + viewportWidth/1.5 + buttonSize*8 + buttonSize, viewportHeight/4 + 40 + buttonSize * 3 + fontSize + buttonSize*2, buttonSize, buttonSize);
+
+addButton is Button("envadd", "Add", 40 + viewportWidth/1.5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
+deleteButton is Button("envdelete", "Del", 40 + viewportWidth/1.5 + buttonSize * 5, viewportHeight/4 + 40, buttonSize * 5, buttonSize * 2);
+
+instrumentButtons is [
+    addButton, deleteButton,
+    envOnButton, sustainOnButton, loopOnButton,
+    sustainPlusButton, sustainMinusButton,
+    loopFromPlusButton, loopFromMinusButton, loopToPlusButton, loopToMinusButton
+];
+
+instrEditor is [instrumentBackground, envelopeBackground, envelopeRender, instrumentButtons, instrumentText, pianoRoll, pianoScroll];
 }
 
 action InitUIEvents {
@@ -1922,6 +2028,294 @@ action InitSampleEditEvents {
     }
 }
 
+action InitInstrumentEditEvents {
+    # determine which point was clicked
+
+    mouseOverEnvelopeGrid is currentView == "instrument" && mouseX >= 40 && mouseX <= 40 + viewportWidth/1.5 && mouseY >= viewportHeight/4 + 40 && mouseY <= viewportHeight/4 + 40 + 3*viewportHeight/4 / 1.5;
+
+    mouseOverPiano is currentView == "instrument" && mouseY >= viewportHeight - keyHeight*1.55 && mouseY <= viewportHeight - keyHeight*0.55;
+
+    mouseOctave is floor((mouseX - keyOffset[1]) / (keyWidth * 7));
+
+    mouseBlackKeyX is mouseX - keyOffset[1] - (keyWidth/2 + blackKeyWidth)/2 - keyWidth*7*mouseOctave;
+    mouseBlackKey is floor(mouseBlackKeyX / keyWidth);
+
+    isOnBlackKey is mouseOverPiano &&
+                mouseY <= viewportHeight - keyHeight*1.55 + keyHeight/2 &&
+                (mouseBlackKey == 0 || mouseBlackKey == 1 || mouseBlackKey == 3 || mouseBlackKey == 4 || mouseBlackKey == 5) &&
+                (mouseBlackKeyX % keyWidth) < blackKeyWidth;
+
+    # White key fallback
+    mouseWhiteKey is floor((mouseX - keyOffset[1] - keyWidth*7*mouseOctave) / keyWidth);
+
+
+    mouseWhiteNote is mouseOctave * 12 + whiteKeyOffsets[mouseWhiteKey + 1];
+    mouseBlackNote is mouseOctave * 12 + blackKeyOffsets[mouseBlackKey + 1];
+
+    hoveredKey is mouseBlackNote if isOnBlackKey else mouseWhiteNote if mouseOverPiano else -1;
+
+    when (mouseDown) {
+        if (mouseOverEnvelopeGrid) {
+            for (i = 1; i < instruments[currentInstrument].envelopeCount + 1; i++) { # go through each envelope point
+                # convert each envelope point to screen-space
+                tempTick = instrumentEnvelopes[currentInstrument][i].tick;
+
+                tempVol = instrumentEnvelopes[currentInstrument][i].vol;
+
+                tempTick = floor(40 + (tempTick * viewportWidth / 1.5)/256);
+                tempVol = floor((viewportHeight/4 + 40) + ((101 - tempVol)/100) * 3*viewportHeight/4 / 1.5 - 3.25);
+
+                if (mouseX >= tempTick - 2 && mouseX <= tempTick + 7.5 + 2 && mouseY >= tempVol - 2 && mouseY <= tempVol + 7.5 + 2) {
+                    pointFocus = i;
+                    draggingEnvelopePoint = true;
+                    # better to break here but JS-EDEN complains
+                }
+            }
+        }
+
+        if (mouseOverPiano) {
+            noteSampleMaps[currentInstrument][hoveredKey + 1] = currentSample;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() -1;
+                const sampleId = root.lookup("currentSample").value();
+                const noteId = root.lookup("hoveredKey").value();
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "instrument_note_sample",
+                    instrumentId: instrumentId,
+                    sampleId: sampleId,
+                    noteId: noteId
+                })
+            }}$
+        }
+    }
+
+    when(mouseUp) {
+        draggingEnvelopePoint = false;
+    }
+
+    when(mouseX) {
+        if (mousePressed && draggingEnvelopePoint && mouseOverEnvelopeGrid) {
+            # mouseX = 40 + (envTick * viewportWidth / 1.5)/256
+            # mouseY = (viewportHeight/4 + 40) + ((101 - envVol)/100) * 3*viewportHeight/4 / 1.5 - 3.25
+            # mouseY - (viewportHeight/4 + 40) + 3.25 = ((101 - envVol)/100) * 3*viewportHeight/4 / 1.5
+            # (mouseY - (viewportHeight/4 + 40) + 3.25)/(3*viewportHeight/4 / 1.5) = ((101 - envVol)/100)
+            # 100 * (mouseY - (viewportHeight/4 + 40) + 3.25)/(3*viewportHeight/4 / 1.5) = 101 - envVol
+            # envVol = 101 - 100 * (mouseY - (viewportHeight/4 + 40) + 3.25)/(3*viewportHeight/4 / 1.5)
+  
+            newTick = floor(256*1.5*(mouseX - 40)/viewportWidth);
+            newVol = floor(101 - 100 * (mouseY - (viewportHeight/4 + 40) + 3.25)/(3*viewportHeight/4 / 1.5));
+
+            # clamp to adjacent points
+            if (pointFocus == 1) {
+                newTick = 0;
+            } else if (newTick <= instrumentEnvelopes[currentInstrument][pointFocus - 1].tick) {
+                newTick = instrumentEnvelopes[currentInstrument][pointFocus - 1].tick;
+            } else if (pointFocus < instruments[currentInstrument].envelopeCount && newTick > instrumentEnvelopes[currentInstrument][pointFocus + 1].tick) {
+                newTick = instrumentEnvelopes[currentInstrument][pointFocus + 1].tick;
+            }
+
+            instrumentEnvelopes[currentInstrument][pointFocus].tick = max(0, min(newTick, 256));
+            instrumentEnvelopes[currentInstrument][pointFocus].vol = max(0, min(newVol, 100));
+
+            ${{
+                const instr = root.lookup("currentInstrument").value() - 1;
+                const point = root.lookup("pointFocus").value() - 1;
+
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_point",
+                    instrumentId: instr,
+                    point: point,
+                    tick: root.lookup("instrumentEnvelopes").value()[instr][point].tick,
+                    vol: root.lookup("instrumentEnvelopes").value()[instr][point].vol,
+                })
+            }}$
+        }
+    }
+
+    when(currentInstrument + 1) {
+        pointFocus = -1;
+    }
+
+    when(envenabled_click) {
+        if (instruments[currentInstrument].envelopeEnabled) {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_disable"
+                })
+            }}$
+        } else {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_enable"
+                })
+            }}$
+        }
+
+        instruments[currentInstrument].envelopeEnabled = !instruments[currentInstrument].envelopeEnabled;
+    }
+
+    when(envsustainenabled_click) {
+        if (instruments[currentInstrument].sustainEnabled) {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_disable_sustain"
+                })
+            }}$
+        } else {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_enable_sustain"
+                })
+            }}$
+        }
+
+        instruments[currentInstrument].sustainEnabled = !instruments[currentInstrument].sustainEnabled;
+    }
+
+    when(envloopenabled_click) {
+        if (instruments[currentInstrument].loopEnabled) {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_disable_loop"
+                })
+            }}$
+        } else {
+            ${{
+                root.lookup("engine_node").value().port.postMessage({
+                    type:"envelope_enable_loop"
+                })
+            }}$
+        }
+
+        instruments[currentInstrument].loopEnabled = !instruments[currentInstrument].loopEnabled;
+    }
+
+    when(envsustainplus_click) {
+        if(instruments[currentInstrument].sustain < instruments[currentInstrument].envelopeCount) {
+            instruments[currentInstrument].sustain = instruments[currentInstrument].sustain + 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const sustain = root.lookup("instruments").value()[currentInstrument].sustain;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_sustain",
+                    instrumentId: instrumentId,
+                    point: sustain
+                })
+            }}$
+        }
+    }
+
+    when(envsustainminus_click) {
+        if(instruments[currentInstrument].sustain > 0) {
+            instruments[currentInstrument].sustain = instruments[currentInstrument].sustain - 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const sustain = root.lookup("instruments").value()[currentInstrument].sustain;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_sustain",
+                    instrumentId: instrumentId,
+                    point: sustain
+                })
+            }}$
+        }
+    }
+
+    when(envloopfromplus_click) {
+        if(instruments[currentInstrument].loopFrom < instruments[currentInstrument].envelopeCount && instruments[currentInstrument].loopFrom <= instruments[currentInstrument].loopTo) {
+            instruments[currentInstrument].loopFrom = instruments[currentInstrument].loopFrom + 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const from = root.lookup("instruments").value()[currentInstrument].loopFrom;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_loop_from",
+                    instrumentId: instrumentId,
+                    point: from
+                })
+            }}$
+        }
+    }
+
+    when(envloopfromminus_click) {
+        if(instruments[currentInstrument].loopFrom > 0) {
+            instruments[currentInstrument].loopFrom = instruments[currentInstrument].loopFrom - 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const from = root.lookup("instruments").value()[currentInstrument].loopFrom;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_loop_from",
+                    instrumentId: instrumentId,
+                    point: from
+                })
+            }}$
+        }
+    }
+
+    when(envlooptoplus_click) {
+        if(instruments[currentInstrument].loopTo < instruments[currentInstrument].envelopeCount) {
+            instruments[currentInstrument].loopTo = instruments[currentInstrument].loopTo + 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const to = root.lookup("instruments").value()[currentInstrument].loopTo;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_loop_to",
+                    instrumentId: instrumentId,
+                    point: to
+                })
+            }}$
+        }
+    }
+
+    when(envlooptominus_click) {
+        if(instruments[currentInstrument].loopTo > 0 && instruments[currentInstrument].loopTo >= instruments[currentInstrument].loopFrom) {
+            instruments[currentInstrument].loopFrom = instruments[currentInstrument].loopFrom + 1;
+
+            ${{
+                const instrumentId = root.lookup("currentInstrument").value() - 1;
+                const to = root.lookup("instruments").value()[currentInstrument].loopTo;
+                root.lookup("engine_node").value().port.postMessage({
+                    type: "envelope_set_loop_to",
+                    instrumentId: instrumentId,
+                    point: to
+                })
+            }}$
+        }
+    }
+
+    when(envadd_click) {
+        do AddEnvelope;
+
+        ${{
+            const instrumentId = root.lookup("currentInstrument").value() - 1;
+            const pos = root.lookup("pointFocus").value() - 1;
+            root.lookup("engine_node").value().port.postMessage({
+                type: "envelope_add_point",
+                instrumentId: instrumentId,
+                point: pos
+            })
+        }}$
+    }
+
+    when(envdelete_click) {
+        do DeleteEnvelope;
+
+        ${{
+            const instrumentId = root.lookup("currentInstrument").value() - 1;
+            const pos = root.lookup("pointFocus").value() - 1;
+            root.lookup("engine_node").value().port.postMessage({
+                type: "envelope_delete_point",
+                instrumentId: instrumentId,
+                point: pos
+            })
+        }}$
+    }
+}
+
 action config {
 ## Global variables used by JS-Eden to keep track of the state of the engine inside AudioWorklet
 
@@ -1996,6 +2390,7 @@ action start {
         do :project > MakeSampleEditor;
         do :project > InitUIEvents;
         do :project > InitSampleEditEvents;
+        do :project > InitInstrumentEditEvents;
         do :project > SetupListeners;
         do :project > Timing;
     }
@@ -2023,6 +2418,8 @@ action ACTIVE {
 
     MAX_SAMPLES = 256;
     MAX_INSTRUMENTS = 128;
+
+    MAX_ENVELOPE_POINTS = 8;
 
     NUM_PATTERNS = 255;
     NUM_ROWS = 64;
@@ -2086,15 +2483,21 @@ action ACTIVE {
     draggingLoopFrom = false;
     draggingLoopTo = false;
 
+    draggingEnvelopePoint = false;
+
     selectFrom = -1;
     selectTo = -1;
 
     sampleFrom is floor(selectFrom / viewportWidth * samplePool[currentSample + 1].length);
     sampleTo is ceil(selectTo / viewportWidth * samplePool[currentSample + 1].length) if (selectTo != selectFrom) else sampleFrom;
 
+    pointFocus = 0;
+
     is_playing is false;
     order = 0 with i is 1..255;
     keys = 0 with i is 0..119;
+    whiteKeyOffsets = [0, 2, 4, 5, 7, 9, 11];
+    blackKeyOffsets = [1, 3, 0, 6, 8, 10]; 
     semitones = ["C‒", "C#", "D-", "D#", "E‒", "F‒", "F#", "G‒", "G#", "A-", "A#", "B-"];
     octave = 4;
 
@@ -2107,7 +2510,22 @@ action ACTIVE {
     tempFrom = 0;
     tempTo = 0;
 
-    instrument_list = InstrumentList("instrument_list");
+    envelopePoints = ${{ {
+            active: false, tick: 0, vol: 0
+        }
+    }}$ with e is 1..MAX_ENVELOPE_POINTS;
+
+    noteSampleMaps = keys with j is 1..MAX_INSTRUMENTS;
+
+    envelopePoints[1].active = true;
+    envelopePoints[1].tick = 0;
+    envelopePoints[1].vol = 100;
+    
+    envelopePoints[2].active = true;
+    envelopePoints[2].tick = 16;
+    envelopePoints[2].vol = 100;
+
+    instrumentEnvelopes  = envelopePoints with i is 1..MAX_INSTRUMENTS;
 
     do :project > MakePatterns;
 }

@@ -72,6 +72,8 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.setAsSample(msg);
             } else if (msg.type == "instrument_synth") {
                 this.setAsSynth(msg);
+            } else if (msg.type == "instrument_note_sample") {
+                this.setInstrumentNoteSample(msg);
             } else if (msg.type == "sample_play") {
                 this.playSample(msg);
             } else if (msg.type == "sample_stop") {
@@ -100,6 +102,31 @@ class MixerProcessor extends AudioWorkletProcessor {
                 this.setLoopFrom(msg);
             } else if (msg.type == "set_loop_to") {
                 this.setLoopTo(msg);
+            // Envelope
+            } else if (msg.type == "envelope_enable") {
+                this.enableEnvelope(msg);
+            } else if (msg.type == "envelope_disable") {
+                this.disableEnvelope(msg);
+            } else if (msg.type == "envelope_enable_sustain") {
+                this.enableEnvelopeSustain(msg);
+            } else if (msg.type == "envelope_disable_sustain") {
+                this.disableEnvelopeSustain(msg);
+            } else if (msg.type == "envelope_enable_loop") {
+                this.enableEnvelopeLoop(msg);
+            } else if (msg.type == "envelope_disable_loop") {
+                this.disableEnvelopeLoop(msg);
+            } else if (msg.type == "envelope_set_point") {
+                this.setEnvelopePoint(msg);
+            } else if (msg.type == "envelope_set_sustain") {
+                this.setEnvelopeSustain(msg);
+            } else if (msg.type == "envelope_set_loop_from") {
+                this.setEnvelopeLoopFrom(msg);
+            } else if (msg.type == "envelope_set_loop_to") {
+                this.setEnvelopeLoopTo(msg);
+            } else if (msg.type == "envelope_add_point") {
+                this.addEnvelopePoint(msg);
+            } else if (msg.type == "envelope_delete_point") {
+                this.deleteEnvelopePoint(msg);
             }
         };
     }
@@ -351,6 +378,10 @@ class MixerProcessor extends AudioWorkletProcessor {
         this.wasm.exports.set_instrument_synth(this.enginePtr, msg.instrumentId);
     }
 
+    setInstrumentNoteSample(msg) {
+        const res = this.wasm.exports.set_instrument_note_sample(this.enginePtr, msg.instrumentId, msg.sampleId, msg.noteId);
+    }
+
     updateSample(msg) {
         const res = this.wasm.exports.get_bins_from_sample(this.enginePtr, msg.sampleId, this.waveformPtr);
            
@@ -442,6 +473,59 @@ class MixerProcessor extends AudioWorkletProcessor {
     setLoopTo(msg) {
         const res = this.wasm.exports.set_loop_to(this.enginePtr, msg.sampleId, msg.loopTo);
     }
+
+    // Envelopes
+
+    enableEnvelope(msg) {
+       const res = this.wasm.exports.enable_envelope(this.enginePtr, msg.instrumentId)
+    }
+
+    disableEnvelope(msg) {
+       const res = this.wasm.exports.disable_envelope(this.enginePtr, msg.instrumentId)
+    }
+
+    enableEnvelopeSustain(msg) {
+       const res = this.wasm.exports.enable_envelope_sustain(this.enginePtr, msg.instrumentId)
+    }
+
+    disableEnvelopeSustain(msg) {
+       const res = this.wasm.exports.disable_envelope_sustain(this.enginePtr, msg.instrumentId)
+    }
+
+    enableEnvelopeLoop(msg) {
+       const res = this.wasm.exports.enable_envelope_loop(this.enginePtr, msg.instrumentId)
+    }
+
+    disableEnvelopeLoop(msg) {
+       const res = this.wasm.exports.disable_envelope_loop(this.enginePtr, msg.instrumentId)
+    }
+
+    setEnvelopePoint(msg) {
+        const res = this.wasm.exports.set_envelope_point_value(this.enginePtr, msg.instrumentId, msg.point, msg.tick, msg.vol);
+        console.log(res);
+    }
+
+    setEnvelopeSustain(msg) {
+        const res = this.wasm.exports.set_envelope_sustain(this.enginePtr, msg.instrumentId, msg.point);
+    }
+
+    setEnvelopeLoopFrom(msg) {
+        const res = this.wasm.exports.set_envelope_loop_from(this.enginePtr, msg.instrumentId, msg.point);
+    }
+
+    setEnvelopeLoopTo(msg) {
+        const res = this.wasm.exports.set_envelope_loop_to(this.enginePtr, msg.instrumentId, msg.point);
+    }
+
+    addEnvelopePoint(msg) {
+        const res = this.wasm.exports.add_envelope_point(this.enginePtr, msg.instrumentId, msg.point);
+    }
+
+    deleteEnvelopePoint(msg) {
+        const res = this.wasm.exports.delete_envelope_point(this.enginePtr, msg.instrumentId, msg.point);
+    }
+
+    // MAIN LOOP
 
     process(ins, outs, parameters) {
         if(!this.wasm) return true;

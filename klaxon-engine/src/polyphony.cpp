@@ -54,12 +54,12 @@ void Polyphony::add_voice(Instrument* instrument, Sample* sample, int channel_id
     v.finished = false;
     v.volume = static_cast<float>(volume)/100.f;
     v.position = 0;
-    v.env_val = (instrument->envelope.enabled && instrument->envelope.points[0].active) ? instrument->envelope.points[0].vol : 1.0f;
+    v.env_val = (instrument->envelope.enabled && instrument->envelope.points[0].active) ? instrument->envelope.points[0].vol * 0.01f : 1.0f;
 
     v.type = instrument->type;
     v.instrument = instrument;
     v.sample = (instrument->type == InstrumentType::SAMPLE) ? sample : nullptr;
-
+    
     curr++;
 }
 
@@ -137,17 +137,16 @@ void Polyphony::render_sample(Voice& voice, float** output, int frames)
 
         if (voice.sample->channels == 1) {
             // linear interpolate
-            // TODO: Add fast sinc
 
-            output[0][i] += L_out_lerp * voice.env_val * voice.volume;
-            output[1][i] += L_out_lerp * voice.env_val * voice.volume;
+            output[0][i] += L_out_lerp * voice.env_val * voice.volume * .25f;
+            output[1][i] += L_out_lerp * voice.env_val * voice.volume * .25f;
         } else {
             float R0 = voice.sample->right[p];
             float R1 = voice.sample->right[p + 1];
             float R_out_lerp = lerp(R0, R1, frac);
 
-            output[0][i] += L_out_lerp * voice.env_val * voice.volume;
-            output[1][i] += R_out_lerp * voice.env_val * voice.volume;
+            output[0][i] += L_out_lerp * voice.env_val * voice.volume * .25f;
+            output[1][i] += R_out_lerp * voice.env_val * voice.volume * .25f;
         }
 
         voice.position += (voice.backwards) ? -voice.rate : voice.rate;
@@ -234,13 +233,18 @@ void Polyphony::advance_env_tick()
         if (!env.enabled) continue;
 
         voice.env_tick++;
+        
+        if (!voice.releasing && env.sustain && env.sustain_at == voice.env_pos) continue;
 
-        if (!voice.releasing && env.sustain_at == voice.env_pos) continue;
+        if (voice.releasing && voice.env_tick < env.points[voice.env_pos].tick) {
+            voice.env_tick = env.points[voice.env_pos].tick;
+        }
 
-        if(!voice.releasing && voice.env_tick >= env.points[env.loop_to].tick)
+        if(!voice.releasing && env.loop && voice.env_tick >= env.points[env.loop_to].tick)
         {
             voice.env_pos = env.loop_from;
             voice.env_tick = env.points[voice.env_pos].tick;
+            continue;
         }
 
         if (voice.env_pos + 1 >= MAX_POINTS || !env.points[voice.env_pos + 1].active && voice.env_fade == 0.0f)
@@ -256,17 +260,23 @@ void Polyphony::advance_env_tick()
 
         Point& P0 = env.points[voice.env_pos];
         Point& P1 = env.points[voice.env_pos + 1];
-
-        if (voice.env_tick == P1.tick) {
-            voice.env_pos++;
-            voice.env_val = P1.vol / 100.f;
-            continue;
-        }
         
-        int tick_diff = P1.tick - P0.tick;
-        float frac = static_cast<float>(voice.env_tick - P0.tick) / tick_diff;
+        float V0 = static_cast<float>(P0.vol) * 0.01f;
+        float V1 = static_cast<float>(P1.vol) * 0.01f;
 
-        voice.env_val = lerp(P0.vol / 100.0f, P1.vol / 100.0f, frac);
+        int tick_diff = P1.tick - P0.tick;
+
+        float frac = 0.0f;
+        if (tick_diff > 0)
+        {
+            frac = static_cast<float>(voice.env_tick - P0.tick) / static_cast<float>(tick_diff);
+            frac = std::clamp(frac, 0.0f, 1.0f);
+        }
+
+        voice.env_val = lerp(V0, V1, frac);
+
+        if (voice.env_tick >= P1.tick)
+            voice.env_pos++;
     }
 }
 
@@ -278,7 +288,7 @@ void Polyphony::dump_playheads(int* sample_playhead_arr, int* envelope_playhead_
     {       
         sample_playhead_arr[v] = (voices[v].active && voices[v].sample && voices[v].sample_id == sample_id) ? static_cast<int>(voices[v].position) : -1;
         
-        envelope_playhead_arr[v] = (voices[v].active && voices[v].instrument_id == instrument_id) ? voices[v].env_tick : -1;
+        envelope_playhead_arr[v] = (voices[v].active && voices[v].instrument_id == instrument_id && voices[v].instrument->envelope.enabled) ? voices[v].env_tick : -1;
     }
 }
 
